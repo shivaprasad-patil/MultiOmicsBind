@@ -183,14 +183,14 @@ def plot_architecture(save_path: Optional[str] = None, figsize: Tuple[int, int] 
                 fc=colors['arrow'], ec=colors['arrow'], linewidth=2)
     
     # Add explanatory text boxes
-    # Efficiency box
+    # Efficiency box - positioned to avoid overlap with Genomics encoder
     efficiency_text = (
         "Efficiency Comparison:\n"
         "• All-pairs: O(n²) complexity\n"
         "• Binding modality: O(n) complexity\n"
         "• 3-6x speedup with 5+ modalities"
     )
-    ax.text(18.5, 8.5, efficiency_text, ha='right', va='top',
+    ax.text(16.5, 10.5, efficiency_text, ha='center', va='top',
            fontsize=9, color=colors['text_dark'],
            bbox=dict(boxstyle="round,pad=0.4", facecolor='#E8F5E8', 
                     edgecolor=colors['output'], alpha=0.9))
