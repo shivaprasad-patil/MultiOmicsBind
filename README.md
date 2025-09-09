@@ -1,7 +1,17 @@
 # MultiOmicsBind
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shi| **Cell Painting** | Phenotypic screening, morphology | 1K-5K features | Rich morphological phenotype |
+[![PyTorch](https://img.shi| **C| **Cell Painting** | Phenotypic screening, morphology | 1K-5K features | Rich morphological phenotype |
+| **# Works because binding modality aligns all modalities to common space
+```
+
+## 📊 Examples
+
+### Basic Integrationlomics** | Metabolism studies | 1K-5K metabolites | Downstream functional readout |
+
+## 🔧 Binding Modality Technical Details
+
+### Dynamic Modality Managementinting** | Phenotypic screening, morphology | 1K-5K features | Rich morphological phenotype |
 | **Metabolomics** | Metabolism studies | 1K-5K metabolites | Downstream functional readout |
 
 ## 🔧 Binding Modality Technical Details
