@@ -1,7 +1,12 @@
 # MultiOmicsBind
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-1.9+-red.svg)](https://pytorch.org/)
+[![PyTorch](https://img.shi| **Cell Painting** | Phenotypic screening, morphology | 1K-5K features | Rich morphological phenotype |
+| **Metabolomics** | Metabolism studies | 1K-5K metabolites | Downstream functional readout |
+
+## 🔧 Binding Modality Technical Details
+
+### Dynamic Modality Managemento/badge/PyTorch-1.9+-red.svg)](https://pytorch.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 **MultiOmicsBind** is a deep learning framework for integrating and analyzing multi-omics data using contrastive learning and neural encoders. Inspired by [ImageBind](https://imagebind.metademolab.com) from Meta AI, it enables unified representation learning across different biological data modalities.
