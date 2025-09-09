@@ -225,6 +225,7 @@ def run_experiment(data_config, embed_dim=256, epochs=10, batch_size=32):
     
     model = MultiOmicsBindWithHead(
         input_dims=input_dims,
+        binding_modality='transcriptomics',  # Use binding modality approach
         cat_dims=cat_dims,
         num_dims=num_dims,
         embed_dim=embed_dim,

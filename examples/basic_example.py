@@ -153,15 +153,23 @@ def main():
     input_dims = dataset.get_input_dims()
     cat_dims, num_dims = dataset.get_metadata_dims()
     
+    # Demo: Compare different binding modality strategies
+    print("\n   Available modalities:", list(input_dims.keys()))
+    print("   Testing different binding modality approaches...")
+    
+    # Use transcriptomics as binding modality (typically most comprehensive)
     model = MultiOmicsBindWithHead(
         input_dims=input_dims,
         cat_dims=cat_dims,
         num_dims=num_dims,
         embed_dim=256,  # Smaller for demo
-        num_classes=3   # Low, Medium, High response
+        num_classes=3,  # Low, Medium, High response
+        binding_modality='transcriptomics'  # NEW: Use binding modality approach
     ).to(device)
     
-    print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+    print(f"   Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+    print(f"   Binding modality: {model.get_binding_modality()}")
+    print(f"   Complexity: O(n) instead of O(n²) for contrastive learning")
     
     # Setup optimizer
     optimizer = optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)

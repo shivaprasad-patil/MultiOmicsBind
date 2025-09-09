@@ -96,7 +96,7 @@ def train_multiomicsbind(
                 
                 # Contrastive loss (if multiple modalities)
                 if len(embeddings) > 1:
-                    loss_con = contrastive_loss(embeddings, temperature=temperature)
+                    loss_con = model.compute_contrastive_loss(embeddings, temperature)
                     total_loss_batch = (classification_weight * loss_clf + 
                                       contrastive_weight * loss_con)
                 else:
@@ -106,7 +106,7 @@ def train_multiomicsbind(
             else:
                 # Contrastive-only mode
                 embeddings = model(inputs)
-                loss_con = contrastive_loss(embeddings, temperature=temperature)
+                loss_con = model.compute_contrastive_loss(embeddings, temperature)
                 loss_clf = torch.tensor(0.0, device=device)
                 total_loss_batch = contrastive_weight * loss_con
 
@@ -223,12 +223,12 @@ def evaluate_model(
                 
                 # Contrastive loss
                 if len(embeddings) > 1:
-                    loss_con = contrastive_loss(embeddings)
+                    loss_con = model.compute_contrastive_loss(embeddings)
                     total_contrastive_loss += loss_con.item() * batch_size
             else:
                 embeddings = model(inputs)
                 if len(embeddings) > 1:
-                    loss_con = contrastive_loss(embeddings)
+                    loss_con = model.compute_contrastive_loss(embeddings)
                     total_contrastive_loss += loss_con.item() * batch_size
     
     # Calculate metrics

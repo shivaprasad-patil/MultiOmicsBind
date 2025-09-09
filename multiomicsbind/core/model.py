@@ -19,6 +19,7 @@ class MultiOmicsBindWithHead(nn.Module):
     
     Args:
         input_dims (Dict[str, int]): Dictionary mapping modality names to input dimensions
+        binding_modality (str): Name of modality to use as binding anchor (required)
         cat_dims (Optional[list]): List of cardinalities for categorical metadata variables
         num_dims (int): Number of numerical metadata variables (default: 0)
         embed_dim (int): Dimensionality of embedding space (default: 768)
@@ -33,6 +34,7 @@ class MultiOmicsBindWithHead(nn.Module):
         ... }
         >>> model = MultiOmicsBindWithHead(
         ...     input_dims=input_dims,
+        ...     binding_modality='transcriptomics',  # Use transcriptomics as anchor
         ...     cat_dims=[10, 5],  # 10 drug types, 5 cell lines
         ...     num_dims=1,       # dose
         ...     num_classes=3     # 3 response classes
@@ -42,6 +44,7 @@ class MultiOmicsBindWithHead(nn.Module):
     def __init__(
         self,
         input_dims: Dict[str, int],
+        binding_modality: str,
         cat_dims: Optional[list] = None,
         num_dims: int = 0,
         embed_dim: int = 768,
@@ -53,6 +56,12 @@ class MultiOmicsBindWithHead(nn.Module):
         self.input_dims = input_dims
         self.embed_dim = embed_dim
         self.num_classes = num_classes
+        self.binding_modality = binding_modality
+        
+        # Validate binding modality (required)
+        if binding_modality not in input_dims:
+            raise ValueError(f"Binding modality '{binding_modality}' not found in input_dims. "
+                           f"Available modalities: {list(input_dims.keys())}")
         
         # Omics encoders for each modality
         self.encoders = nn.ModuleDict({
@@ -179,3 +188,34 @@ class MultiOmicsBindWithHead(nn.Module):
         if self.meta_encoder is not None:
             for param in self.meta_encoder.parameters():
                 param.requires_grad = True
+    
+    def compute_contrastive_loss(self, embeddings: Dict[str, torch.Tensor], 
+                               temperature: float = 0.07) -> torch.Tensor:
+        """
+        Compute contrastive loss using the model's binding modality configuration.
+        
+        Args:
+            embeddings (Dict[str, torch.Tensor]): Dictionary of modality embeddings
+            temperature (float): Temperature parameter for contrastive learning
+            
+        Returns:
+            torch.Tensor: Contrastive loss value
+        """
+        from .losses import contrastive_loss
+        return contrastive_loss(embeddings, self.binding_modality, temperature)
+    
+    def set_binding_modality(self, binding_modality: str):
+        """
+        Set or change the binding modality.
+        
+        Args:
+            binding_modality (str): Name of modality to use as binding anchor (required)
+        """
+        if binding_modality not in self.input_dims:
+            raise ValueError(f"Binding modality '{binding_modality}' not found in input_dims. "
+                           f"Available modalities: {list(self.input_dims.keys())}")
+        self.binding_modality = binding_modality
+    
+    def get_binding_modality(self) -> str:
+        """Get the current binding modality."""
+        return self.binding_modality

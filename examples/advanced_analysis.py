@@ -181,7 +181,8 @@ def main():
         cat_dims=cat_dims,
         num_dims=num_dims,
         embed_dim=256,
-        num_classes=3
+        num_classes=3,
+        binding_modality='transcriptomics'  # Use binding modality for efficiency
     ).to(device)
     
     try:

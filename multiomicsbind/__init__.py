@@ -10,7 +10,7 @@ __author__ = "Your Name"
 
 from .core.model import MultiOmicsBindWithHead
 from .core.encoders import OmicsEncoder, MetadataEncoder
-from .core.losses import contrastive_loss
+from .core.losses import contrastive_loss, binding_modality_loss, info_nce_loss
 from .data.dataset import MultiOmicsDataset
 from .training.trainer import train_multiomicsbind, evaluate_model
 from .utils.visualization import plot_architecture, plot_training_history
@@ -20,6 +20,8 @@ __all__ = [
     "OmicsEncoder", 
     "MetadataEncoder",
     "contrastive_loss",
+    "binding_modality_loss",
+    "info_nce_loss",
     "MultiOmicsDataset",
     "train_multiomicsbind",
     "evaluate_model",
