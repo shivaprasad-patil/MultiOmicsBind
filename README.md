@@ -32,8 +32,6 @@ Multi-omics data integration is a critical challenge in systems biology and prec
 
 **Key Innovation**: MultiOmicsBind introduces **Binding Modality**, inspired by Meta's ImageBind:
 
-![Binding Modality Comparison](architecture_binding_comparison.png)
-
 | Approach | Complexity | Comparisons | Memory | Speed | Best For |
 |----------|------------|-------------|---------|-------|----------|
 | **All-Pairs** | O(n²) | n×(n-1)/2 | Quadratic | 1x | 2-3 modalities |
