@@ -29,6 +29,7 @@ Multi-omics data integration is a critical challenge in systems biology and prec
 5. **🔄 Multi-Modal Fusion**: Combines embeddings via mean pooling for downstream analysis
 
 ### 🔗 Binding Modality Innovation
+
 **Key Innovation**: MultiOmicsBind introduces **Binding Modality**, inspired by Meta's ImageBind:
 
 | Approach | Complexity | Comparisons | Memory | Speed | Best For |
@@ -76,6 +77,10 @@ dataset = MultiOmicsDataset(
     num_cols=['dose', 'time'],
     label_col='response'
 )
+
+# ⚠️ Important: All data files must have samples in the same order!
+# Each row in transcriptomics.csv must correspond to the same sample 
+# as the same row in proteomics.csv, metabolomics.csv, etc.
 
 # 3. Create model with binding modality (recommended for 4+ modalities)
 input_dims = dataset.get_input_dims()
@@ -339,25 +344,7 @@ model = MultiOmicsBindWithHead({
 }, binding_modality=None)  # Explore all cross-modal relationships
 ```
 
-## 📈 Performance Benchmarks
-
-### Computational Efficiency (6 Modalities)
-
-| Metric | All-Pairs | Transcriptomics Binding | Speedup |
-|--------|-----------|------------------------|---------|
-| **Training Time** | 45 min | **8 min** | **5.6x** |
-| **Memory Usage** | 12 GB | **2.4 GB** | **5x** |
-| **Convergence** | 100 epochs | **60 epochs** | **1.7x** |
-
-### Biological Performance
-
-| Task | All-Pairs | Binding Modality | Improvement |
-|------|-----------|------------------|-------------|
-| **Drug Response Prediction** | 0.82 AUC | **0.85 AUC** | **+3.7%** |
-| **Disease Classification** | 0.78 F1 | **0.81 F1** | **+3.8%** |
-| **Cross-Modal Retrieval** | 0.73 mAP | **0.79 mAP** | **+8.2%** |
-
-## 🛠️ Advanced Usage
+## ️ Advanced Usage
 
 ### Custom Loss Functions
 ```python
@@ -420,7 +407,6 @@ plot_training_history(model.training_history, save_path="training.png")
 
 ## 📖 Documentation
 
-- **[BINDING_MODALITY.md](BINDING_MODALITY.md)**: Detailed technical documentation on binding modality
 - **[examples/](examples/)**: Complete usage examples and tutorials
 - **API Reference**: Inline documentation for all classes and functions
 
