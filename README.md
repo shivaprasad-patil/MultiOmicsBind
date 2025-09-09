@@ -29,7 +29,6 @@ Multi-omics data integration is a critical challenge in systems biology and prec
 5. **🔄 Multi-Modal Fusion**: Combines embeddings via mean pooling for downstream analysis
 
 ### 🔗 Binding Modality Innovation
-
 **Key Innovation**: MultiOmicsBind introduces **Binding Modality**, inspired by Meta's ImageBind:
 
 | Approach | Complexity | Comparisons | Memory | Speed | Best For |
