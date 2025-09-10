@@ -21,8 +21,7 @@ from multiomicsbind import (
     MultiOmicsBindWithHead,
     MultiOmicsDataset,
     train_multiomicsbind,
-    evaluate_model,
-    plot_architecture
+    evaluate_model
 )
 
 
@@ -259,13 +258,6 @@ def run_experiment(data_config, embed_dim=256, epochs=10, batch_size=32):
     
     print(f"Training metrics: {train_metrics}")
     print(f"Validation metrics: {val_metrics}")
-    
-    # Create architecture visualization
-    plot_architecture(
-        save_path=f'architecture_{len(data_config)}_modalities.png',
-        custom_modalities=data_config
-    )
-    print(f"Architecture saved as 'architecture_{len(data_config)}_modalities.png'")
     
     return {
         'data_config': data_config,
