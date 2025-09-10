@@ -21,7 +21,6 @@ from multiomicsbind import (
     MultiOmicsDataset,
     train_multiomicsbind,
     evaluate_model,
-    plot_architecture,
     plot_training_history
 )
 
@@ -204,9 +203,6 @@ def main():
     # Create visualizations
     print("\n8. Creating visualizations...")
     
-    # Plot architecture
-    plot_architecture(save_path='architecture.png')
-    
     # Plot training history
     if hasattr(trained_model, 'training_history'):
         plot_training_history(trained_model.training_history, save_path='training_history.png')
@@ -214,7 +210,6 @@ def main():
     print("\nExample completed successfully!")
     print("Generated files:")
     print("- multiomicsbind_trained.pth (trained model)")
-    print("- architecture.png (model architecture)")
     print("- training_history.png (training curves)")
 
 
