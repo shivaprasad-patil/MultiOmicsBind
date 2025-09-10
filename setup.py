@@ -8,13 +8,13 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="multiomicsbind",
-    version="0.1.1",
-    author="Your Name",
-    author_email="your.email@example.com",
+    version="0.1.2",
+    author="Shivaprasad Patil",
+    author_email="shivaprasad309319@gmail.com",
     description="A deep learning framework for multi-omics data integration and analysis",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/MultiOmicsBind",
+    url="https://github.com/shivaprasad-patil/MultiOmicsBind",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",

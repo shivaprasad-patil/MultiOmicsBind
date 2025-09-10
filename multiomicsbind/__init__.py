@@ -5,8 +5,8 @@ This package provides a PyTorch-based framework for integrating and analyzing
 multi-omics data using contrastive learning and neural encoders.
 """
 
-__version__ = "0.1.0"
-__author__ = "Your Name"
+__version__ = "0.1.2"
+__author__ = "Shivaprasad Patil"
 
 from .core.model import MultiOmicsBindWithHead
 from .core.encoders import OmicsEncoder, MetadataEncoder
