@@ -203,14 +203,24 @@ def main():
     # 3. Visualize embeddings with UMAP
     print("\n3. Creating UMAP visualizations...")
     try:
-        plot_embeddings_umap(
-            embeddings, labels, 
-            save_path='embeddings_umap.png',
-            figsize=(15, 5)
-        )
-        print("✓ UMAP visualization saved as 'embeddings_umap.png'")
+        # Use the first modality's embeddings for UMAP visualization
+        if embeddings and labels is not None:
+            first_modality = list(embeddings.keys())[0]
+            first_embeddings = embeddings[first_modality]
+            
+            plot_embeddings_umap(
+                first_embeddings, labels, 
+                save_path='embeddings_umap.png',
+                figsize=(10, 8),
+                class_names=['Low', 'Medium', 'High']
+            )
+            print(f"✓ UMAP visualization saved for {first_modality} embeddings")
+        else:
+            print("✗ No embeddings or labels available for UMAP")
     except ImportError:
         print("✗ UMAP not available. Install with: pip install umap-learn")
+    except Exception as e:
+        print(f"✗ UMAP visualization failed: {e}")
     
     # 4. Feature importance analysis
     print("\n4. Analyzing feature importance...")
@@ -229,20 +239,29 @@ def main():
     try:
         gradients = get_gradients(model, sample_inputs)
         
-        # Plot feature importance for each modality
+        # Collect importance scores for all modalities
+        importance_dict = {}
         for modality, grad in gradients.items():
             feature_names = dataset.get_feature_names(modality)
-            if len(feature_names) == grad.shape[1]:
+            if len(feature_names) >= grad.shape[1]:
                 importance_scores = np.mean(np.abs(grad), axis=0)
+                # Pad or trim to match feature names length
+                if len(importance_scores) < len(feature_names):
+                    importance_scores = np.pad(importance_scores, (0, len(feature_names) - len(importance_scores)))
+                elif len(importance_scores) > len(feature_names):
+                    importance_scores = importance_scores[:len(feature_names)]
                 
-                plot_feature_importance(
-                    importance_scores,
-                    feature_names,
-                    top_k=20,
-                    title=f"{modality.title()} Feature Importance",
-                    save_path=f'feature_importance_{modality}.png'
-                )
-                print(f"✓ Feature importance for {modality} saved")
+                importance_dict[modality] = importance_scores
+                print(f"✓ Feature importance computed for {modality}")
+        
+        # Plot all feature importances together
+        if importance_dict:
+            plot_feature_importance(
+                importance_dict,
+                save_path='feature_importance_all.png',
+                top_k=20
+            )
+            print(f"✓ Feature importance plot saved")
     
     except Exception as e:
         print(f"✗ Feature importance analysis failed: {e}")

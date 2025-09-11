@@ -319,7 +319,8 @@ def plot_embeddings_umap(
     embeddings: np.ndarray,
     labels: np.ndarray,
     save_path: Optional[str] = None,
-    figsize: Tuple[int, int] = (10, 8)
+    figsize: Tuple[int, int] = (10, 8),
+    class_names: Optional[List[str]] = None
 ) -> None:
     """
     Plot UMAP visualization of embeddings.
@@ -329,6 +330,7 @@ def plot_embeddings_umap(
         labels (np.ndarray): Labels for coloring
         save_path (Optional[str]): Path to save the figure
         figsize (Tuple[int, int]): Figure size
+        class_names (Optional[List[str]]): Names for each class/label
     """
     try:
         import umap
@@ -339,13 +341,29 @@ def plot_embeddings_umap(
         
         # Create plot
         plt.figure(figsize=figsize)
-        scatter = plt.scatter(embedding_2d[:, 0], embedding_2d[:, 1], 
-                            c=labels, cmap='viridis', alpha=0.7, s=50)
-        plt.colorbar(scatter)
+        
+        # Get unique labels and create discrete colors
+        unique_labels = np.unique(labels)
+        colors = plt.cm.viridis(np.linspace(0, 1, len(unique_labels)))
+        
+        # Plot each class separately for proper legend
+        for i, label in enumerate(unique_labels):
+            mask = labels == label
+            # Use class names if provided, otherwise default names
+            if class_names and len(class_names) > label:
+                label_name = class_names[label]
+            else:
+                label_name = f'Class {label}'
+            
+            plt.scatter(embedding_2d[mask, 0], embedding_2d[mask, 1], 
+                       c=[colors[i]], alpha=0.7, s=50, 
+                       label=label_name)
+        
         plt.title('UMAP Visualization of Embeddings', fontsize=16, fontweight='bold')
         plt.xlabel('UMAP 1')
         plt.ylabel('UMAP 2')
         plt.grid(True, alpha=0.3)
+        plt.legend()
         
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
