@@ -13,7 +13,13 @@ from .core.encoders import OmicsEncoder, MetadataEncoder
 from .core.losses import contrastive_loss, binding_modality_loss, info_nce_loss
 from .data.dataset import MultiOmicsDataset
 from .training.trainer import train_multiomicsbind, evaluate_model
-from .utils.visualization import plot_architecture, plot_training_history
+from .utils.visualization import (
+    plot_architecture, 
+    plot_training_history, 
+    plot_embeddings_umap, 
+    plot_feature_importance, 
+    plot_confusion_matrix
+)
 
 __all__ = [
     "MultiOmicsBindWithHead",
@@ -26,5 +32,8 @@ __all__ = [
     "train_multiomicsbind",
     "evaluate_model",
     "plot_architecture",
-    "plot_training_history"
+    "plot_training_history",
+    "plot_embeddings_umap",
+    "plot_feature_importance",
+    "plot_confusion_matrix"
 ]
