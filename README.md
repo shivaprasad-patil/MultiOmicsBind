@@ -377,10 +377,7 @@ model.set_binding_modality('proteomics')          # Change binding
 
 ### Visualization & Analysis
 ```python
-from multiomicsbind.utils import plot_architecture, plot_training_history
-
-# Plot model architecture
-plot_architecture(save_path="model_architecture.png")
+from multiomicsbind.utils import plot_training_history
 
 # Analyze training progress  
 plot_training_history(model.training_history, save_path="training.png")
@@ -518,10 +515,7 @@ cat_dims, num_dims = dataset.get_metadata_dims()  # Get metadata dimensions
 ### Visualization
 
 ```python
-from multiomicsbind.utils import plot_architecture, plot_training_history
-
-# Plot model architecture
-plot_architecture(save_path="architecture.png")
+from multiomicsbind.utils plot_training_history
 
 # Plot training curves  
 plot_training_history(model.training_history, save_path="training.png")
