@@ -457,3 +457,392 @@ def plot_confusion_matrix(
         print(f"Confusion matrix saved to {save_path}")
     else:
         plt.show()
+
+
+def plot_temporal_patterns(
+    temporal_data: np.ndarray,
+    timepoints: List[float],
+    labels: Optional[np.ndarray] = None,
+    feature_indices: Optional[List[int]] = None,
+    class_names: Optional[List[str]] = None,
+    save_path: Optional[str] = None,
+    figsize: Tuple[int, int] = (12, 8)
+) -> None:
+    """
+    Plot temporal patterns for selected features across different classes.
+    
+    Args:
+        temporal_data (np.ndarray): Temporal data of shape (samples, timepoints, features)
+        timepoints (List[float]): Time points for x-axis
+        labels (Optional[np.ndarray]): Class labels for grouping
+        feature_indices (Optional[List[int]]): Which features to plot (default: first 6)
+        class_names (Optional[List[str]]): Names for each class
+        save_path (Optional[str]): Path to save the figure
+        figsize (Tuple[int, int]): Figure size
+    """
+    if feature_indices is None:
+        feature_indices = list(range(min(6, temporal_data.shape[2])))
+    
+    n_features = len(feature_indices)
+    n_cols = 3
+    n_rows = (n_features + n_cols - 1) // n_cols
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    if n_rows == 1:
+        axes = axes.reshape(1, -1)
+    elif n_cols == 1:
+        axes = axes.reshape(-1, 1)
+    
+    colors = plt.cm.Set1(np.linspace(0, 1, 10))  # Up to 10 classes
+    
+    for idx, feature_idx in enumerate(feature_indices):
+        row = idx // n_cols
+        col = idx % n_cols
+        ax = axes[row, col]
+        
+        if labels is not None:
+            # Plot by class
+            unique_labels = np.unique(labels)
+            for i, label in enumerate(unique_labels):
+                mask = labels == label
+                class_data = temporal_data[mask, :, feature_idx]
+                
+                # Calculate mean and std
+                mean_pattern = np.nanmean(class_data, axis=0)
+                std_pattern = np.nanstd(class_data, axis=0)
+                
+                # Plot mean with error bars
+                label_name = class_names[label] if class_names and len(class_names) > label else f'Class {label}'
+                ax.plot(timepoints, mean_pattern, color=colors[i], linewidth=2, 
+                       marker='o', label=label_name)
+                ax.fill_between(timepoints, 
+                              mean_pattern - std_pattern, 
+                              mean_pattern + std_pattern,
+                              color=colors[i], alpha=0.2)
+        else:
+            # Plot all samples
+            for sample_idx in range(min(20, temporal_data.shape[0])):  # Limit to 20 samples
+                sample_data = temporal_data[sample_idx, :, feature_idx]
+                ax.plot(timepoints, sample_data, alpha=0.3, linewidth=1)
+        
+        ax.set_title(f'Feature {feature_idx}', fontweight='bold')
+        ax.set_xlabel('Time')
+        ax.set_ylabel('Expression')
+        ax.grid(True, alpha=0.3)
+        
+        if labels is not None and idx == 0:  # Add legend to first subplot
+            ax.legend()
+    
+    # Hide empty subplots
+    for idx in range(n_features, n_rows * n_cols):
+        row = idx // n_cols
+        col = idx % n_cols
+        axes[row, col].set_visible(False)
+    
+    plt.suptitle('Temporal Expression Patterns', fontsize=16, fontweight='bold')
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Temporal patterns plot saved to {save_path}")
+    else:
+        plt.show()
+
+
+def plot_temporal_heatmap(
+    temporal_data: np.ndarray,
+    timepoints: List[float],
+    feature_names: Optional[List[str]] = None,
+    sample_labels: Optional[np.ndarray] = None,
+    class_names: Optional[List[str]] = None,
+    top_k_features: int = 50,
+    save_path: Optional[str] = None,
+    figsize: Tuple[int, int] = (12, 8)
+) -> None:
+    """
+    Plot heatmap of temporal data showing feature expression over time.
+    
+    Args:
+        temporal_data (np.ndarray): Temporal data of shape (samples, timepoints, features)
+        timepoints (List[float]): Time points
+        feature_names (Optional[List[str]]): Names of features
+        sample_labels (Optional[np.ndarray]): Sample class labels
+        class_names (Optional[List[str]]): Names for each class
+        top_k_features (int): Number of top varying features to show
+        save_path (Optional[str]): Path to save the figure
+        figsize (Tuple[int, int]): Figure size
+    """
+    # Calculate temporal variance for each feature
+    temporal_variance = np.nanvar(temporal_data, axis=(0, 1))  # Variance across samples and time
+    top_feature_indices = np.argsort(temporal_variance)[-top_k_features:]
+    
+    # Get average temporal patterns
+    if sample_labels is not None:
+        unique_labels = np.unique(sample_labels)
+        n_classes = len(unique_labels)
+        
+        fig, axes = plt.subplots(1, n_classes, figsize=(figsize[0] * n_classes / 2, figsize[1]))
+        if n_classes == 1:
+            axes = [axes]
+        
+        for i, label in enumerate(unique_labels):
+            mask = sample_labels == label
+            class_data = temporal_data[mask, :, :]
+            
+            # Average across samples in this class
+            mean_data = np.nanmean(class_data, axis=0)  # Shape: (timepoints, features)
+            
+            # Select top varying features
+            heatmap_data = mean_data[:, top_feature_indices].T  # Features x Timepoints
+            
+            # Create heatmap
+            im = axes[i].imshow(heatmap_data, aspect='auto', cmap='RdBu_r', 
+                              interpolation='nearest')
+            
+            # Set labels
+            class_name = class_names[label] if class_names and len(class_names) > label else f'Class {label}'
+            axes[i].set_title(f'{class_name}', fontweight='bold')
+            axes[i].set_xlabel('Time Points')
+            axes[i].set_xticks(range(len(timepoints)))
+            axes[i].set_xticklabels([f'{t}' for t in timepoints])
+            
+            if i == 0:
+                axes[i].set_ylabel('Features')
+                if feature_names:
+                    selected_names = [feature_names[idx] for idx in top_feature_indices]
+                    axes[i].set_yticks(range(0, len(selected_names), max(1, len(selected_names)//10)))
+                    axes[i].set_yticklabels([selected_names[j] for j in range(0, len(selected_names), 
+                                                                            max(1, len(selected_names)//10))], 
+                                          fontsize=8)
+            else:
+                axes[i].set_yticks([])
+            
+            # Add colorbar
+            plt.colorbar(im, ax=axes[i], fraction=0.046, pad=0.04)
+        
+    else:
+        # Single heatmap for all samples
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        
+        # Average across all samples
+        mean_data = np.nanmean(temporal_data, axis=0)  # Shape: (timepoints, features)
+        
+        # Select top varying features
+        heatmap_data = mean_data[:, top_feature_indices].T  # Features x Timepoints
+        
+        # Create heatmap
+        im = ax.imshow(heatmap_data, aspect='auto', cmap='RdBu_r', interpolation='nearest')
+        
+        # Set labels
+        ax.set_title('Temporal Expression Heatmap', fontweight='bold')
+        ax.set_xlabel('Time Points')
+        ax.set_ylabel('Features')
+        ax.set_xticks(range(len(timepoints)))
+        ax.set_xticklabels([f'{t}' for t in timepoints])
+        
+        if feature_names:
+            selected_names = [feature_names[idx] for idx in top_feature_indices]
+            ax.set_yticks(range(0, len(selected_names), max(1, len(selected_names)//10)))
+            ax.set_yticklabels([selected_names[j] for j in range(0, len(selected_names), 
+                                                               max(1, len(selected_names)//10))], 
+                              fontsize=8)
+        
+        # Add colorbar
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Temporal heatmap saved to {save_path}")
+    else:
+        plt.show()
+
+
+def plot_temporal_architecture(
+    static_modalities: List[str],
+    temporal_modalities: List[str],
+    temporal_encoders: Dict[str, str],
+    binding_modality: str,
+    save_path: Optional[str] = None,
+    figsize: Tuple[int, int] = (16, 10)
+) -> None:
+    """
+    Plot architecture diagram for temporal multi-omics model.
+    
+    Args:
+        static_modalities (List[str]): Names of static modalities
+        temporal_modalities (List[str]): Names of temporal modalities
+        temporal_encoders (Dict[str, str]): Encoder types for temporal modalities
+        binding_modality (str): Name of binding modality
+        save_path (Optional[str]): Path to save the figure
+        figsize (Tuple[int, int]): Figure size
+    """
+    fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=300)
+    ax.set_xlim(0, 16)
+    ax.set_ylim(0, 10)
+    ax.axis('off')
+    
+    # Color scheme
+    colors = {
+        'static': '#E3F2FD',
+        'static_border': '#1976D2',
+        'temporal': '#FFF3E0',
+        'temporal_border': '#FF6B35',
+        'binding': '#FF6B35',
+        'fusion': '#0D47A1',
+        'output': '#2E7D32',
+        'text_dark': '#212121',
+        'text_light': '#FFFFFF'
+    }
+    
+    # Title
+    ax.text(8, 9.5, 'Temporal MultiOmicsBind Architecture', ha='center', va='center',
+           fontsize=20, fontweight='bold', color=colors['text_dark'])
+    ax.text(8, 9, 'Mixed Static and Temporal Multi-Omics Integration', ha='center', va='center',
+           fontsize=14, style='italic', color=colors['text_dark'])
+    
+    # Calculate positions
+    all_modalities = static_modalities + temporal_modalities
+    n_total = len(all_modalities)
+    x_positions = np.linspace(2, 14, n_total)
+    
+    # Input layer
+    input_y = 7.5
+    encoder_y = 6.0
+    embedding_y = 4.5
+    fusion_y = 2.5
+    output_y = 1.0
+    
+    box_width, box_height = 1.8, 0.6
+    
+    # Draw modalities
+    for i, (modality, x) in enumerate(zip(all_modalities, x_positions)):
+        is_static = modality in static_modalities
+        is_binding = modality == binding_modality
+        
+        # Input box
+        color = colors['static'] if is_static else colors['temporal']
+        border = colors['static_border'] if is_static else colors['temporal_border']
+        
+        rect = patches.FancyBboxPatch(
+            (x - box_width/2, input_y - box_height/2), box_width, box_height,
+            boxstyle="round,pad=0.1", facecolor=color, edgecolor=border, linewidth=2
+        )
+        ax.add_patch(rect)
+        ax.text(x, input_y, modality.replace('_', '\n'), ha='center', va='center',
+               fontsize=9, fontweight='bold', color=colors['text_dark'])
+        
+        # Encoder box
+        if is_static:
+            encoder_text = 'Static\nEncoder'
+            encoder_color = colors['static']
+        else:
+            encoder_type = temporal_encoders.get(modality, 'LSTM')
+            encoder_text = f'{encoder_type.upper()}\nEncoder'
+            encoder_color = colors['temporal']
+        
+        rect = patches.FancyBboxPatch(
+            (x - box_width/2, encoder_y - box_height/2), box_width, box_height,
+            boxstyle="round,pad=0.1", facecolor=encoder_color, edgecolor=border, linewidth=2
+        )
+        ax.add_patch(rect)
+        ax.text(x, encoder_y, encoder_text, ha='center', va='center',
+               fontsize=8, fontweight='bold', color=colors['text_dark'])
+        
+        # Embedding box
+        embed_color = colors['binding'] if is_binding else colors['static_border']
+        embed_text = 'Binding\nEmbedding' if is_binding else 'Embedding'
+        text_color = colors['text_light'] if is_binding else colors['text_light']
+        
+        rect = patches.FancyBboxPatch(
+            (x - box_width/2, embedding_y - box_height/2), box_width, box_height,
+            boxstyle="round,pad=0.1", facecolor=embed_color, edgecolor='white', linewidth=2
+        )
+        ax.add_patch(rect)
+        ax.text(x, embedding_y, embed_text, ha='center', va='center',
+               fontsize=8, fontweight='bold', color=text_color)
+        
+        # Arrows
+        ax.arrow(x, input_y - box_height/2, 0, -0.7, head_width=0.1, head_length=0.1,
+                fc='gray', ec='gray', linewidth=1.5)
+        ax.arrow(x, encoder_y - box_height/2, 0, -0.7, head_width=0.1, head_length=0.1,
+                fc='gray', ec='gray', linewidth=1.5)
+    
+    # Fusion layer
+    fusion_x = 8
+    rect = patches.FancyBboxPatch(
+        (fusion_x - 4, fusion_y - box_height/2), 8, box_height,
+        boxstyle="round,pad=0.1", facecolor=colors['fusion'], edgecolor='white', linewidth=2
+    )
+    ax.add_patch(rect)
+    ax.text(fusion_x, fusion_y, 'Multi-Modal Fusion Layer', ha='center', va='center',
+           fontsize=12, fontweight='bold', color=colors['text_light'])
+    
+    # Arrows to fusion
+    for x in x_positions:
+        ax.annotate('', xy=(fusion_x, fusion_y + box_height/2),
+                   xytext=(x, embedding_y - box_height/2),
+                   arrowprops=dict(arrowstyle='->', color='gray', lw=1.5,
+                                 connectionstyle="arc3,rad=0.1"))
+    
+    # Output layer
+    rect = patches.FancyBboxPatch(
+        (fusion_x - 2, output_y - box_height/2), 4, box_height,
+        boxstyle="round,pad=0.1", facecolor=colors['output'], edgecolor='white', linewidth=2
+    )
+    ax.add_patch(rect)
+    ax.text(fusion_x, output_y, 'Classification Output', ha='center', va='center',
+           fontsize=12, fontweight='bold', color=colors['text_light'])
+    
+    # Arrow to output
+    ax.arrow(fusion_x, fusion_y - box_height/2, 0, -0.8, head_width=0.15, head_length=0.1,
+            fc='gray', ec='gray', linewidth=2)
+    
+    # Add legends and explanations
+    # Static vs Temporal legend
+    legend_x = 1
+    legend_y = 3.5
+    
+    # Static box
+    rect = patches.FancyBboxPatch(
+        (legend_x - 0.3, legend_y), 0.6, 0.3,
+        boxstyle="round,pad=0.05", facecolor=colors['static'], 
+        edgecolor=colors['static_border'], linewidth=1
+    )
+    ax.add_patch(rect)
+    ax.text(legend_x + 0.8, legend_y + 0.15, 'Static Modalities\n(Single timepoint)', 
+           fontsize=9, va='center')
+    
+    # Temporal box
+    rect = patches.FancyBboxPatch(
+        (legend_x - 0.3, legend_y - 0.7), 0.6, 0.3,
+        boxstyle="round,pad=0.05", facecolor=colors['temporal'], 
+        edgecolor=colors['temporal_border'], linewidth=1
+    )
+    ax.add_patch(rect)
+    ax.text(legend_x + 0.8, legend_y - 0.55, 'Temporal Modalities\n(Multiple timepoints)', 
+           fontsize=9, va='center')
+    
+    # Binding modality info
+    binding_x = 15
+    binding_y = 6
+    ax.text(binding_x, binding_y, f'Binding Modality:\n{binding_modality}', 
+           ha='center', va='center', fontsize=10, fontweight='bold',
+           bbox=dict(boxstyle="round,pad=0.3", facecolor='white', 
+                    edgecolor=colors['binding'], linewidth=2))
+    
+    # Temporal encoders info
+    encoder_info = '\n'.join([f'{mod}: {enc}' for mod, enc in temporal_encoders.items()])
+    ax.text(binding_x, binding_y - 1.5, f'Temporal Encoders:\n{encoder_info}', 
+           ha='center', va='center', fontsize=9,
+           bbox=dict(boxstyle="round,pad=0.3", facecolor='white', 
+                    edgecolor=colors['temporal_border'], linewidth=2))
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+        print(f"Temporal architecture diagram saved to {save_path}")
+    else:
+        plt.show()

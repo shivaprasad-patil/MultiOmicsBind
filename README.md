@@ -284,6 +284,54 @@ python examples/binding_modality_example.py
 python examples/flexible_modalities_example.py
 ```
 
+### Temporal Multi-Omics Integration
+
+```python
+# Temporal omics data (mixed static/temporal modalities)
+python examples/temporal_example.py
+```
+
+## ⏰ Temporal Multi-Omics
+
+MultiOmicsBind supports **temporal multi-omics data** where modalities are measured at different timepoints:
+
+### Features
+- **Mixed Data Types**: Combine static (single timepoint) and temporal (multiple timepoints) modalities
+- **Flexible Timepoints**: Each modality can have different temporal resolutions
+- **LSTM Encoders**: Default choice for biological time series (3-20 timepoints)
+- **Multiple Encoders**: LSTM, Transformer, and Attention-based options
+
+### Usage Example
+
+```python
+from multiomicsbind import TemporalMultiOmicsBind, TemporalMultiOmicsDataset
+
+# Define temporal structure
+dataset = TemporalMultiOmicsDataset(
+    static_data_paths={'transcriptomics': 'genes.csv'},          # t0 only
+    temporal_data_paths={'proteomics': 'proteins_timeseries.csv'}, # t0,t1,t2,t4,t8
+    temporal_metadata={'proteomics': {'timepoints': [0,1,2,4,8], 'time_col': 'timepoint'}},
+    metadata_path='metadata.csv'
+)
+
+# Create temporal model (LSTM recommended for biological time series)
+model = TemporalMultiOmicsBind(
+    static_input_dims={'transcriptomics': 20000},
+    temporal_input_dims={'proteomics': 4000},
+    temporal_encoders={'proteomics': 'lstm'},  # LSTM: best for 3-20 timepoints
+    binding_modality='transcriptomics'
+)
+```
+
+### Temporal Encoder Options
+
+| Encoder | Best For | Timepoints | Use Case |
+|---------|----------|------------|----------|
+| **`lstm`** | **Biological time series** | **3-20** | **Gene regulation → protein → metabolite** |
+| `transformer` | Long/complex sequences | >20 | Multi-phase responses, distant dependencies |
+| `attention_pool` | Interpretability | Any | Understanding important timepoints |
+| `aggregation` | Simple patterns | Any | Mean/max over time, efficiency |
+
 ## 🔧 Key Features
 
 ### Multi-Modal Data Support
