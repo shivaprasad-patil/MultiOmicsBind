@@ -17,7 +17,7 @@ from .core.temporal_encoders import (
     TemporalAggregationEncoder,      # For simple temporal aggregation
     create_temporal_encoder          # Factory function
 )
-from .core.losses import contrastive_loss, binding_modality_loss, info_nce_loss
+from .core.losses import contrastive_loss, binding_modality_loss
 from .data.dataset import MultiOmicsDataset, TemporalMultiOmicsDataset
 from .training.trainer import train_multiomicsbind, evaluate_model
 from .utils.visualization import (
@@ -48,7 +48,6 @@ __all__ = [
     # Loss functions
     "contrastive_loss",
     "binding_modality_loss",
-    "info_nce_loss",
     
     # Datasets
     "MultiOmicsDataset",

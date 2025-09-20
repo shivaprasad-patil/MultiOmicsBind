@@ -90,23 +90,3 @@ def binding_modality_loss(embeddings: Dict[str, torch.Tensor],
         torch.Tensor: Contrastive loss value
     """
     return contrastive_loss(embeddings, binding_modality, temperature)
-
-
-def info_nce_loss(embeddings: Dict[str, torch.Tensor], 
-                 binding_modality: str,
-                 temperature: float = 0.07) -> torch.Tensor:
-    """
-    Compute InfoNCE loss using binding modality approach.
-    
-    This is another name for the same binding modality contrastive loss,
-    emphasizing the InfoNCE formulation.
-    
-    Args:
-        embeddings (Dict[str, torch.Tensor]): Dictionary of modality embeddings
-        binding_modality (str): Name of the modality to use as anchor
-        temperature (float): Temperature parameter
-        
-    Returns:
-        torch.Tensor: InfoNCE loss value
-    """
-    return contrastive_loss(embeddings, binding_modality, temperature)
