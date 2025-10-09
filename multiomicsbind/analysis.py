@@ -46,8 +46,23 @@ def create_analysis_report(
     analysis, and cross-modal similarity computation. All results are saved to
     the specified output directory.
     
+    ⚠️ IMPORTANT - AVOIDING DATA LEAKAGE:
+        Always pass a HELD-OUT TEST SET or VALIDATION SET to this function,
+        NOT the training set! Evaluating on training data gives misleading
+        results due to overfitting and memorization.
+        
+        Example (CORRECT):
+            train_dataset, test_dataset = random_split(dataset, [0.7, 0.3])
+            model, history = train_temporal_model(train_dataset, ...)
+            report = create_analysis_report(model, test_dataset, ...)  # ✓ Test set!
+        
+        Example (WRONG - DATA LEAKAGE):
+            model, history = train_temporal_model(dataset, ...)
+            report = create_analysis_report(model, dataset, ...)  # ✗ Same data!
+    
     Args:
         model: Trained TemporalMultiOmicsBind or MultiOmicsBindWithHead model
+        dataset: Test or validation dataset (NOT the training set!) for evaluation
         dataset: Dataset instance (TemporalMultiOmicsDataset or MultiOmicsDataset)
         device: torch device ('cuda' or 'cpu')
         history (Optional): Training history dictionary. If provided, will plot training curves.

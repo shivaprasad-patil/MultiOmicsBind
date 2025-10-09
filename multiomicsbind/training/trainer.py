@@ -343,27 +343,43 @@ def train_temporal_model(
     if temporal_encoder_kwargs is None:
         temporal_encoder_kwargs = {}
     
-    # Split dataset
-    train_size = int((1 - val_split) * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    # Handle both raw datasets and Subset objects from random_split
+    # If dataset is a Subset, get the original dataset
+    if hasattr(dataset, 'dataset'):
+        # This is a Subset from random_split
+        base_dataset = dataset.dataset
+    else:
+        # This is the original dataset
+        base_dataset = dataset
+    
+    # Split dataset if val_split > 0
+    if val_split > 0:
+        train_size = int((1 - val_split) * len(dataset))
+        val_size = len(dataset) - train_size
+        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    else:
+        # No additional split needed (user already split externally)
+        train_dataset = dataset
+        val_dataset = None
+        train_size = len(dataset)
+        val_size = 0
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False) if val_dataset else None
     
-    # Get number of classes from all labels
-    all_labels = [dataset[i]['label'] for i in range(len(dataset))]
+    # Get number of classes from all labels (use base_dataset)
+    all_labels = [base_dataset[i]['label'] for i in range(len(base_dataset))]
     num_classes = len(np.unique(all_labels))
     
     if verbose:
         print(f"Training with {num_classes} classes")
         print(f"Train samples: {train_size}, Validation samples: {val_size}")
     
-    # Initialize model
-    static_dims = {k: v for k, v in dataset.get_input_dims().items() if k in dataset.static_data}
-    temporal_dims = {k: v for k, v in dataset.get_input_dims().items() if k in dataset.temporal_data}
+    # Initialize model (use base_dataset methods)
+    static_dims = {k: v for k, v in base_dataset.get_input_dims().items() if k in base_dataset.static_data}
+    temporal_dims = {k: v for k, v in base_dataset.get_input_dims().items() if k in base_dataset.temporal_data}
     temporal_encoders = {k: 'lstm' for k in temporal_dims}
-    cat_dims, num_dims = dataset.get_metadata_dims()
+    cat_dims, num_dims = base_dataset.get_metadata_dims()
     
     model = TemporalMultiOmicsBind(
         static_input_dims=static_dims,
@@ -408,6 +424,10 @@ def train_temporal_model(
             loss = cls_loss + contrastive_weight * contrast_loss
             
             loss.backward()
+            
+            # Add gradient clipping to prevent NaN
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
             optimizer.step()
             
             train_loss += loss.item()
@@ -421,33 +441,44 @@ def train_temporal_model(
         model.eval()
         val_loss, val_correct, val_total = 0, 0, 0
         
-        with torch.no_grad():
-            val_iter = tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]") if verbose else val_loader
-            for batch in val_iter:
-                inputs = {k: (v.to(device) if isinstance(v, torch.Tensor) else v) 
-                         for k, v in batch.items()}
-                labels = inputs.pop('label').to(device)
-                
-                logits, embeddings = model(inputs, return_embeddings=True)
-                cls_loss = cls_criterion(logits, labels)
-                contrast_loss = contrastive_loss(embeddings, binding_modality=binding_modality)
-                loss = cls_loss + contrastive_weight * contrast_loss
-                
-                val_loss += loss.item()
-                val_correct += (logits.argmax(1) == labels).sum().item()
-                val_total += labels.size(0)
+        if val_loader is not None:
+            with torch.no_grad():
+                val_iter = tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]") if verbose else val_loader
+                for batch in val_iter:
+                    inputs = {k: (v.to(device) if isinstance(v, torch.Tensor) else v) 
+                             for k, v in batch.items()}
+                    labels = inputs.pop('label').to(device)
+                    
+                    logits, embeddings = model(inputs, return_embeddings=True)
+                    cls_loss = cls_criterion(logits, labels)
+                    contrast_loss = contrastive_loss(embeddings, binding_modality=binding_modality)
+                    loss = cls_loss + contrastive_weight * contrast_loss
+                    
+                    val_loss += loss.item()
+                    val_correct += (logits.argmax(1) == labels).sum().item()
+                    val_total += labels.size(0)
         
         # Record metrics
         history['train_loss'].append(train_loss / len(train_loader))
-        history['val_loss'].append(val_loss / len(val_loader))
         history['train_acc'].append(train_correct / train_total)
-        history['val_acc'].append(val_correct / val_total)
+        
+        if val_loader is not None:
+            history['val_loss'].append(val_loss / len(val_loader))
+            history['val_acc'].append(val_correct / val_total)
+        else:
+            history['val_loss'].append(0.0)  # No validation
+            history['val_acc'].append(0.0)
         
         if verbose:
-            print(f"Epoch {epoch+1}/{epochs} - "
-                  f"Train Loss: {history['train_loss'][-1]:.4f}, "
-                  f"Train Acc: {history['train_acc'][-1]:.4f}, "
-                  f"Val Loss: {history['val_loss'][-1]:.4f}, "
-                  f"Val Acc: {history['val_acc'][-1]:.4f}")
+            if val_loader is not None:
+                print(f"Epoch {epoch+1}/{epochs} - "
+                      f"Train Loss: {history['train_loss'][-1]:.4f}, "
+                      f"Train Acc: {history['train_acc'][-1]:.4f}, "
+                      f"Val Loss: {history['val_loss'][-1]:.4f}, "
+                      f"Val Acc: {history['val_acc'][-1]:.4f}")
+            else:
+                print(f"Epoch {epoch+1}/{epochs} - "
+                      f"Train Loss: {history['train_loss'][-1]:.4f}, "
+                      f"Train Acc: {history['train_acc'][-1]:.4f}")
     
     return model, history

@@ -189,11 +189,17 @@ def main():
     
     # Evaluate model
     print("\n6. Evaluating model...")
+    
+    # ⚠️ WARNING: For demonstration purposes, we evaluate on both train and val sets.
+    # In production, you should ONLY evaluate on held-out test data to avoid data leakage.
+    # Evaluating on training data will show inflated performance metrics.
+    # See BEST_PRACTICES.md for proper train/val/test split guidelines.
+    
     train_metrics = evaluate_model(trained_model, train_loader, device, use_classification=True)
     val_metrics = evaluate_model(trained_model, val_loader, device, use_classification=True)
     
-    print(f"Training metrics: {train_metrics}")
-    print(f"Validation metrics: {val_metrics}")
+    print(f"Training metrics (biased - for reference only): {train_metrics}")
+    print(f"Validation metrics (unbiased): {val_metrics}")
     
     # Save model
     print("\n7. Saving model...")

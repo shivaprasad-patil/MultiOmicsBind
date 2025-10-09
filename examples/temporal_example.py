@@ -10,6 +10,13 @@ Scenario:
 - Proteomics measured at 5 timepoints (0h, 1h, 2h, 4h, 8h) after treatment
 
 The example uses the new high-level API functions for simplified workflow.
+
+NOTE: This example generates realistic synthetic data with:
+- Subtle, noisy signal patterns (not too strong/deterministic)
+- Proper train/test split to avoid data leakage
+- Missing values (NaN) to simulate real-world data
+- Variable signal strength across samples for realism
+Expected accuracy: 60-85% (not 100%!)
 """
 
 import torch
@@ -26,7 +33,7 @@ from multiomicsbind import (
     compute_cross_modal_similarity, # NEW: Cross-modal similarity
     plot_training_history_detailed, # NEW: Detailed training plots
     plot_cross_modal_similarity_matrices, # NEW: Similarity heatmaps
-    fix_nan_values,                # NEW: NaN handling utility
+    check_and_fix_all_nan_values,  # NEW: Automatic NaN detection and fixing
     create_analysis_report         # NEW: Comprehensive analysis report
 )
 
@@ -56,16 +63,27 @@ def create_synthetic_temporal_data(n_samples=1000, save_files=True):
     # Transcriptomics (6000 genes)
     transcriptomics_data = []
     for i in range(n_samples):
-        # Generate gene expression with label-dependent patterns
+        # Generate gene expression with MORE REALISTIC label-dependent patterns
         base_expression = np.random.normal(5, 2, 6000)  # log2 expression
         
-        # Add label-specific patterns
-        if labels[i] == 0:  # No response
-            base_expression[:100] += np.random.normal(-1, 0.5, 100)  # Downregulated genes
-        elif labels[i] == 1:  # Partial response
-            base_expression[:100] += np.random.normal(0.5, 0.5, 100)  # Slightly upregulated
-        else:  # Full response
-            base_expression[:100] += np.random.normal(2, 0.5, 100)  # Highly upregulated
+        # Add SUBTLE label-specific patterns with MORE NOISE and OVERLAP
+        # Only affect a small subset of "biomarker" genes with much weaker signal
+        signal_strength = np.random.uniform(0.3, 0.7)  # Variable signal strength per sample
+        noise_level = np.random.uniform(1.5, 2.5)      # Variable noise per sample
+        
+        if labels[i] == 0:  # No response - very subtle changes
+            # Only 30 genes show weak downregulation
+            base_expression[:30] += np.random.normal(-0.3 * signal_strength, noise_level, 30)
+        elif labels[i] == 1:  # Partial response - modest changes with overlap
+            # 50 genes show moderate upregulation but with high variance
+            base_expression[:50] += np.random.normal(0.4 * signal_strength, noise_level, 50)
+        else:  # Full response - stronger but still noisy signal
+            # 80 genes show upregulation with considerable noise
+            base_expression[:80] += np.random.normal(0.8 * signal_strength, noise_level, 80)
+        
+        # Add random dropout (missing values) to make it more realistic
+        dropout_mask = np.random.random(6000) < 0.02  # 2% missing values
+        base_expression[dropout_mask] = np.nan
         
         transcriptomics_data.append({
             'sample_id': sample_ids[i],
@@ -77,14 +95,22 @@ def create_synthetic_temporal_data(n_samples=1000, save_files=True):
     # Cell painting (1500 morphological features)
     cell_painting_data = []
     for i in range(n_samples):
-        # Generate morphological features
+        # Generate morphological features with MORE REALISTIC patterns
         morphology = np.random.normal(0, 1, 1500)
         
-        # Add label-dependent morphological changes
-        if labels[i] == 2:  # Full response shows strong morphological changes
-            morphology[:50] += np.random.normal(1.5, 0.3, 50)
-        elif labels[i] == 1:  # Partial response shows moderate changes
-            morphology[:50] += np.random.normal(0.7, 0.3, 50)
+        # Add SUBTLE label-dependent morphological changes with OVERLAP
+        signal_strength = np.random.uniform(0.2, 0.5)
+        noise_level = np.random.uniform(1.2, 2.0)
+        
+        if labels[i] == 2:  # Full response shows morphological changes but with noise
+            morphology[:30] += np.random.normal(0.6 * signal_strength, noise_level, 30)
+        elif labels[i] == 1:  # Partial response shows subtle changes
+            morphology[:30] += np.random.normal(0.3 * signal_strength, noise_level, 30)
+        # No response (label 0) gets no additional signal - just noise
+        
+        # Add dropout
+        dropout_mask = np.random.random(1500) < 0.03  # 3% missing
+        morphology[dropout_mask] = np.nan
         
         cell_painting_data.append({
             'sample_id': sample_ids[i],
@@ -102,23 +128,29 @@ def create_synthetic_temporal_data(n_samples=1000, save_files=True):
             # Base protein expression
             base_proteins = np.random.normal(0, 1, 4000)
             
-            # Time-dependent response patterns based on labels
+            # Time-dependent response patterns with MORE REALISTIC (weaker) signals
             time_factor = timepoint / max(timepoints)  # 0 to 1
+            signal_strength = np.random.uniform(0.3, 0.6)
+            noise_level = np.random.uniform(1.5, 2.5)
             
             if labels[i] == 0:  # No response - minimal change over time
-                time_effect = np.random.normal(0, 0.1, 4000) * time_factor
-            elif labels[i] == 1:  # Partial response - gradual increase
-                time_effect = np.random.normal(0.5, 0.2, 4000) * time_factor
-                # Some proteins peak and then decline
+                time_effect = np.random.normal(0, noise_level * 0.5, 4000) * time_factor * 0.1
+            elif labels[i] == 1:  # Partial response - gradual SUBTLE increase
+                time_effect = np.random.normal(0.3 * signal_strength, noise_level * 0.7, 4000) * time_factor
+                # Some proteins peak and then decline (but with high variance)
                 if timepoint > 2:
-                    time_effect[:200] *= 0.7
-            else:  # Full response - strong early response
-                time_effect = np.random.normal(1.5, 0.3, 4000) * (1 - 0.3 * time_factor)
-                # Early responders
+                    time_effect[:100] *= np.random.uniform(0.5, 0.9)
+            else:  # Full response - moderate early response (not too strong!)
+                time_effect = np.random.normal(0.6 * signal_strength, noise_level, 4000) * (1 - 0.2 * time_factor)
+                # Early responders (but again, noisy!)
                 if timepoint <= 2:
-                    time_effect[:500] += np.random.normal(1, 0.2, 500)
+                    time_effect[:200] += np.random.normal(0.4 * signal_strength, noise_level * 0.8, 200)
             
             protein_expression = base_proteins + time_effect
+            
+            # Add dropout for realism (temporal proteomics often has missing values)
+            dropout_mask = np.random.random(4000) < 0.05  # 5% missing
+            protein_expression[dropout_mask] = np.nan
             
             proteomics_data.append({
                 'sample_id': sample_ids[i],
@@ -212,28 +244,57 @@ def main():
     print(f"- Temporal info: {dataset.get_temporal_info()}")
     
     # ============================================
+    # FIX NaN VALUES BEFORE SPLITTING!
+    # ============================================
+    print("\n" + "=" * 60)
+    print("AUTOMATIC NaN DETECTION AND FIXING")
+    print("=" * 60)
+    
+    # Automatically check and fix NaN values in ALL modalities (one line!)
+    dataset, nan_summary = check_and_fix_all_nan_values(dataset, verbose=True)
+    
+    print("\n✓ Dataset is now clean and ready for training!")
+    
+    # ============================================
+    # SPLIT DATA INTO TRAIN AND TEST SETS
+    # ============================================
+    print("\n" + "=" * 60)
+    print("CREATING TRAIN/TEST SPLIT")
+    print("=" * 60)
+    
+    from torch.utils.data import random_split
+    
+    # Create proper train/test split (70% train, 30% test)
+    train_size = int(0.7 * len(dataset))
+    test_size = len(dataset) - train_size
+    
+    # Set seed for reproducibility
+    torch.manual_seed(42)
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    
+    print(f"\n✓ Dataset split:")
+    print(f"  - Training samples: {len(train_dataset)} ({100*train_size/len(dataset):.0f}%)")
+    print(f"  - Test samples: {len(test_dataset)} ({100*test_size/len(dataset):.0f}%)")
+    
+    # ============================================
     # NEW SIMPLIFIED API - Training in one line!
     # ============================================
     print("\n" + "=" * 60)
     print("USING NEW HIGH-LEVEL API FUNCTIONS")
     print("=" * 60)
     
-    # Check and fix NaN values (one line!)
-    print("\n1. Checking for NaN values...")
-    dataset = fix_nan_values(dataset, verbose=True)
-    
-    # Train model (one line!)
-    print("\n2. Training model with train_temporal_model()...")
+    # Train model (one line!) - NOW USING TRAIN DATASET ONLY
+    print("\n1. Training model with train_temporal_model()...")
     model, history = train_temporal_model(
-        dataset=dataset,
+        dataset=train_dataset,  # <-- CHANGED: Use train_dataset only
         device=device,
         binding_modality='transcriptomics',
         embed_dim=256,
         epochs=15,
         batch_size=32,
-        lr=1e-3,
+        lr=5e-4,  # Lower learning rate to avoid NaN
         dropout=0.2,
-        val_split=0.2,
+        val_split=0.0,  # No additional split - we already have test_dataset
         verbose=True
     )
     
@@ -241,18 +302,18 @@ def main():
     torch.save(model.state_dict(), 'temporal_multiomicsbind.pth')
     print("\n✓ Model saved as 'temporal_multiomicsbind.pth'")
     
-    # Evaluate model (one line!)
-    print("\n3. Evaluating model with evaluate_temporal_model()...")
+    # Evaluate model (one line!) - NOW USING TEST DATASET ONLY
+    print("\n2. Evaluating model on HELD-OUT TEST SET with evaluate_temporal_model()...")
     embeddings, labels, predictions = evaluate_temporal_model(
         model=model,
-        dataset=dataset,
+        dataset=test_dataset,  # <-- CHANGED: Use test_dataset only
         device=device,
         batch_size=64
     )
-    print(f"✓ Evaluation complete - Accuracy: {(predictions == labels).mean():.4f}")
+    print(f"✓ TEST SET Evaluation complete - Accuracy: {(predictions == labels).mean():.4f}")
     
     # Compute feature importance (one line!)
-    print("\n4. Computing feature importance with compute_feature_importance()...")
+    print("\n3. Computing feature importance with compute_feature_importance()...")
     importance_dict, importance_df = compute_feature_importance(
         model=model,
         dataset=dataset,
@@ -266,7 +327,7 @@ def main():
     print("✓ Feature importance saved to 'temporal_feature_importance.csv'")
     
     # Compute cross-modal similarity (one line!)
-    print("\n5. Computing cross-modal similarity with compute_cross_modal_similarity()...")
+    print("\n4. Computing cross-modal similarity with compute_cross_modal_similarity()...")
     similarity_matrices = compute_cross_modal_similarity(
         embeddings_dict=embeddings,
         verbose=True
@@ -280,7 +341,7 @@ def main():
     print("=" * 60)
     
     # Plot detailed training history (one line!)
-    print("\n6. Plotting training history with plot_training_history_detailed()...")
+    print("\n5. Plotting training history with plot_training_history_detailed()...")
     plot_training_history_detailed(
         history=history,
         save_path='temporal_training_history_detailed.png'
@@ -288,7 +349,7 @@ def main():
     print("✓ Saved to 'temporal_training_history_detailed.png'")
     
     # Plot cross-modal similarity matrices (one line!)
-    print("\n7. Plotting similarity matrices with plot_cross_modal_similarity_matrices()...")
+    print("\n6. Plotting similarity matrices with plot_cross_modal_similarity_matrices()...")
     plot_cross_modal_similarity_matrices(
         similarity_matrices=similarity_matrices,
         save_path='temporal_similarity_matrices.png'
@@ -299,14 +360,14 @@ def main():
     # COMPREHENSIVE ANALYSIS REPORT (ONE LINE!)
     # ============================================
     print("\n" + "=" * 60)
-    print("GENERATING COMPREHENSIVE ANALYSIS REPORT")
+    print("GENERATING COMPREHENSIVE ANALYSIS REPORT ON TEST SET")
     print("=" * 60)
     
-    # Generate full analysis report (one line!)
-    print("\n8. Creating comprehensive report with create_analysis_report()...")
+    # Generate full analysis report on TEST SET (one line!)
+    print("\n7. Creating comprehensive report with create_analysis_report()...")
     report = create_analysis_report(
         model=model,
-        dataset=dataset,
+        dataset=test_dataset,  # <-- CHANGED: Use test_dataset only
         device=device,
         output_dir='./temporal_analysis_results',
         compute_importance=True,
@@ -323,7 +384,8 @@ def main():
     print("- Successfully integrated static (transcriptomics, cell painting) and temporal (proteomics) data")
     print("- LSTM encoder effectively captured temporal proteomics patterns")
     print("- Binding modality approach maintained efficiency with mixed data types")
-    print(f"- Model achieved {report['metrics']['accuracy']:.4f} accuracy on response prediction")
+    print(f"- Model achieved {report['accuracy']:.4f} accuracy on HELD-OUT test set")
+    print(f"- Training samples: {len(train_dataset)}, Test samples: {len(test_dataset)}")
     
     print("\nGenerated files:")
     print("- temporal_multiomicsbind.pth (trained model)")
@@ -342,6 +404,7 @@ def main():
     print("NEW API DEMONSTRATION COMPLETE!")
     print("=" * 60)
     print("\nThe new high-level functions simplify the workflow:")
+    print("✓ check_and_fix_all_nan_values() - Automatic NaN detection and fixing")
     print("✓ train_temporal_model() - Complete training pipeline")
     print("✓ evaluate_temporal_model() - Full model evaluation")
     print("✓ compute_feature_importance() - Gradient-based importance")

@@ -783,6 +783,43 @@ pip install -e ".[dev]"
 pytest tests/
 ```
 
+## ⚠️ Best Practices
+
+**Important**: To ensure robust and reproducible results, please follow these best practices:
+
+### Avoiding Data Leakage
+
+❌ **WRONG**: Evaluating on training data
+```python
+model, history = train_temporal_model(dataset, ...)
+embeddings, labels, preds = evaluate_temporal_model(model, dataset, ...)  # ❌ Leakage!
+```
+
+✅ **CORRECT**: Use proper train/test split
+```python
+from torch.utils.data import random_split
+
+train_dataset, test_dataset = random_split(dataset, [0.7, 0.3])
+model, history = train_temporal_model(train_dataset, ...)
+embeddings, labels, preds = evaluate_temporal_model(model, test_dataset, ...)  # ✅ Good!
+```
+
+### Key Guidelines
+
+1. **Always split your data** before training (70/15/15 train/val/test recommended)
+2. **Never evaluate on training data** - this gives misleadingly high accuracy
+3. **Use validation set** for hyperparameter tuning, test set only for final evaluation
+4. **Create realistic synthetic data** with appropriate noise and signal strength
+5. **Report multiple metrics** (precision, recall, F1) not just accuracy
+
+📖 **Full Guide**: See [BEST_PRACTICES.md](BEST_PRACTICES.md) for comprehensive guidelines on:
+- Train/validation/test splits
+- Avoiding data leakage
+- Creating realistic synthetic data
+- Model evaluation best practices
+- Hyperparameter tuning
+- Feature importance analysis
+
 ## 📄 License
 
 Apache License 2.0 - see [LICENSE](LICENSE) for details.

@@ -40,7 +40,7 @@ from .utils.visualization import (
     plot_cross_modal_similarity_matrices,
     plot_feature_importance_distribution
 )
-from .utils.helpers import fix_nan_values, check_nan_values
+from .utils.helpers import fix_nan_values, check_nan_values, check_and_fix_all_nan_values
 from .analysis import create_analysis_report
 
 __all__ = [

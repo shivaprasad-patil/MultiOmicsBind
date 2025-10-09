@@ -22,9 +22,22 @@ def evaluate_temporal_model(
     embeddings for each modality, true labels, and model predictions. Useful for
     downstream analysis like visualization, feature importance, and performance metrics.
     
+    ⚠️ IMPORTANT - AVOIDING DATA LEAKAGE:
+        Pass a HELD-OUT TEST SET or VALIDATION SET, not the training set!
+        
+        Example (CORRECT):
+            train_dataset, test_dataset = random_split(dataset, [0.7, 0.3])
+            model, history = train_temporal_model(train_dataset, ...)
+            embeddings, labels, preds = evaluate_temporal_model(model, test_dataset, ...)
+        
+        Example (WRONG):
+            model, history = train_temporal_model(dataset, ...)
+            embeddings, labels, preds = evaluate_temporal_model(model, dataset, ...)
+    
     Args:
         model: Trained TemporalMultiOmicsBind or MultiOmicsBindWithHead model
-        dataset: TemporalMultiOmicsDataset or MultiOmicsDataset instance
+        dataset: Test or validation dataset (NOT training set!) for evaluation.
+                Can be either a Dataset object or a Subset from random_split().
         device: torch device ('cuda' or 'cpu')
         batch_size (int): Batch size for evaluation (default: 32)
     
@@ -37,10 +50,10 @@ def evaluate_temporal_model(
     Example:
         >>> from multiomicsbind import evaluate_temporal_model
         >>> embeddings, labels, predictions = evaluate_temporal_model(
-        ...     model, dataset, device
+        ...     model, test_dataset, device  # Use test_dataset, not full dataset!
         ... )
         >>> print(f"Embeddings for modalities: {list(embeddings.keys())}")
-        >>> print(f"Accuracy: {(predictions == labels).mean():.4f}")
+        >>> print(f"Test Accuracy: {(predictions == labels).mean():.4f}")
     """
     model.eval()
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
@@ -107,8 +120,24 @@ def compute_cross_modal_similarity(
     
     for i, mod1 in enumerate(modalities):
         for mod2 in modalities[i+1:]:
+            # Check for NaN values in embeddings
+            emb1 = embeddings_dict[mod1]
+            emb2 = embeddings_dict[mod2]
+            
+            if np.isnan(emb1).any():
+                if verbose:
+                    nan_count = np.isnan(emb1).sum()
+                    print(f"⚠ Warning: {mod1} embeddings contain {nan_count} NaN values - replacing with 0")
+                emb1 = np.nan_to_num(emb1, nan=0.0)
+            
+            if np.isnan(emb2).any():
+                if verbose:
+                    nan_count = np.isnan(emb2).sum()
+                    print(f"⚠ Warning: {mod2} embeddings contain {nan_count} NaN values - replacing with 0")
+                emb2 = np.nan_to_num(emb2, nan=0.0)
+            
             # Compute cosine similarity
-            sim_matrix = cosine_similarity(embeddings_dict[mod1], embeddings_dict[mod2])
+            sim_matrix = cosine_similarity(emb1, emb2)
             similarity_matrices[f"{mod1}_vs_{mod2}"] = sim_matrix
             
             # Compute mean similarity

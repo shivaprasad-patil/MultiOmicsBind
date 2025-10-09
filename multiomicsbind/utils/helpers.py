@@ -195,3 +195,136 @@ def check_nan_values(dataset, verbose: bool = True):
         print("=" * 70)
     
     return nan_stats
+
+
+def check_and_fix_all_nan_values(
+    dataset,
+    fill_value: float = 0.0,
+    verbose: bool = True
+):
+    """
+    Automatically check and fix NaN values across ALL modalities in the dataset.
+    
+    This convenience function scans all modalities (both static and temporal) for
+    NaN values and fixes them automatically. It's the recommended way to ensure
+    clean data before training.
+    
+    Args:
+        dataset: TemporalMultiOmicsDataset or MultiOmicsDataset instance
+        fill_value (float): Value to replace NaN with (default: 0.0)
+        verbose (bool): Whether to print detailed information (default: True)
+    
+    Returns:
+        dataset: Modified dataset with all NaN values replaced
+        nan_summary: Dictionary with NaN statistics for each modality before fixing
+    
+    Example:
+        >>> from multiomicsbind import TemporalMultiOmicsDataset, check_and_fix_all_nan_values
+        >>> 
+        >>> # Load dataset
+        >>> dataset = TemporalMultiOmicsDataset(...)
+        >>> 
+        >>> # Check and fix ALL modalities automatically (one line!)
+        >>> dataset, nan_summary = check_and_fix_all_nan_values(dataset, verbose=True)
+        >>> 
+        >>> # Dataset is now ready for training
+        >>> model, history = train_temporal_model(dataset, ...)
+    
+    Note:
+        This function is recommended over calling fix_nan_values() manually for
+        each modality, as it ensures no modality is accidentally skipped.
+    """
+    if verbose:
+        print("=" * 80)
+        print("CHECKING AND FIXING NaN VALUES ACROSS ALL MODALITIES")
+        print("=" * 80)
+    
+    # Collect all modalities
+    all_modalities = []
+    
+    # Get static modalities
+    if hasattr(dataset, 'static_data'):
+        all_modalities.extend(dataset.static_data.keys())
+    
+    # Get temporal modalities
+    if hasattr(dataset, 'temporal_data'):
+        all_modalities.extend(dataset.temporal_data.keys())
+    
+    # Get general data modalities (for non-temporal datasets)
+    if hasattr(dataset, 'data') and not hasattr(dataset, 'static_data'):
+        all_modalities.extend(dataset.data.keys())
+    
+    if verbose:
+        print(f"\nFound {len(all_modalities)} modalities: {all_modalities}")
+        print()
+    
+    # Check for NaN values in each modality
+    nan_summary = {}
+    modalities_with_nan = []
+    
+    for modality in all_modalities:
+        # Get the data array
+        if hasattr(dataset, 'temporal_data') and modality in dataset.temporal_data:
+            data_array = dataset.temporal_data[modality]
+            data_type = 'temporal'
+        elif hasattr(dataset, 'static_data') and modality in dataset.static_data:
+            data_array = dataset.static_data[modality]
+            data_type = 'static'
+        elif hasattr(dataset, 'data') and modality in dataset.data:
+            data_array = dataset.data[modality]
+            data_type = 'general'
+        else:
+            continue
+        
+        if isinstance(data_array, np.ndarray):
+            nan_count = np.isnan(data_array).sum()
+            total_values = data_array.size
+            
+            nan_summary[modality] = {
+                'nan_count': int(nan_count),
+                'total_values': int(total_values),
+                'percentage': (nan_count / total_values * 100) if total_values > 0 else 0.0,
+                'data_type': data_type
+            }
+            
+            if nan_count > 0:
+                modalities_with_nan.append(modality)
+    
+    # Print summary
+    if verbose:
+        print("NaN Detection Summary:")
+        print("-" * 80)
+        for modality, stats in nan_summary.items():
+            if stats['nan_count'] > 0:
+                print(f"⚠ {modality} ({stats['data_type']}): {stats['nan_count']:,} NaN values "
+                      f"({stats['percentage']:.2f}% of {stats['total_values']:,} total)")
+            else:
+                print(f"✓ {modality} ({stats['data_type']}): No NaN values")
+        print("-" * 80)
+    
+    # Fix NaN values in modalities that have them
+    if modalities_with_nan:
+        if verbose:
+            print(f"\nFixing NaN values in {len(modalities_with_nan)} modalities...")
+            print()
+        
+        for modality in modalities_with_nan:
+            dataset = fix_nan_values(
+                dataset, 
+                modality=modality, 
+                fill_value=fill_value, 
+                verbose=verbose
+            )
+            if verbose:
+                print()
+        
+        if verbose:
+            print("=" * 80)
+            print("✓ ALL NaN VALUES FIXED")
+            print("=" * 80)
+    else:
+        if verbose:
+            print("\n✓ No NaN values found in any modality!")
+            print("=" * 80)
+    
+    return dataset, nan_summary
