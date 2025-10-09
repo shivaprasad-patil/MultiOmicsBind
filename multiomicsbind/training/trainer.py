@@ -285,3 +285,169 @@ class EarlyStopping:
     def save_checkpoint(self, model: nn.Module):
         """Save model weights."""
         self.best_weights = model.state_dict().copy()
+
+
+def train_temporal_model(
+    dataset,
+    device,
+    epochs: int = 20,
+    batch_size: int = 32,
+    lr: float = 1e-4,
+    binding_modality: str = 'transcriptomics',
+    embed_dim: int = 256,
+    dropout: float = 0.2,
+    temporal_encoder_kwargs: Optional[Dict[str, Any]] = None,
+    contrastive_weight: float = 0.1,
+    val_split: float = 0.2,
+    verbose: bool = True
+):
+    """
+    Train a temporal multi-omics model with standard configuration.
+    
+    This function provides a high-level interface for training temporal multi-omics
+    models with minimal boilerplate code. It handles model initialization, data
+    splitting, training loop, and history tracking.
+    
+    Args:
+        dataset: TemporalMultiOmicsDataset instance
+        device: torch device ('cuda' or 'cpu')
+        epochs (int): Number of training epochs (default: 20)
+        batch_size (int): Batch size for training (default: 32)
+        lr (float): Learning rate (default: 1e-4)
+        binding_modality (str): Modality to use for binding/alignment (default: 'transcriptomics')
+        embed_dim (int): Embedding dimension (default: 256)
+        dropout (float): Dropout rate (default: 0.2)
+        temporal_encoder_kwargs (Optional[Dict]): Dict of temporal encoder configurations
+        contrastive_weight (float): Weight for contrastive loss (default: 0.1)
+        val_split (float): Validation split ratio (default: 0.2)
+        verbose (bool): Whether to print training progress (default: True)
+    
+    Returns:
+        model: Trained TemporalMultiOmicsBind model
+        history: Dictionary containing training history with keys:
+            - 'train_loss': List of training losses per epoch
+            - 'val_loss': List of validation losses per epoch
+            - 'train_acc': List of training accuracies per epoch
+            - 'val_acc': List of validation accuracies per epoch
+    
+    Example:
+        >>> from multiomicsbind import TemporalMultiOmicsDataset, train_temporal_model
+        >>> dataset = TemporalMultiOmicsDataset(...)
+        >>> device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        >>> model, history = train_temporal_model(dataset, device, epochs=15)
+        >>> print(f"Final validation accuracy: {history['val_acc'][-1]:.4f}")
+    """
+    from torch.utils.data import random_split
+    from ..core.model import TemporalMultiOmicsBind
+    
+    if temporal_encoder_kwargs is None:
+        temporal_encoder_kwargs = {}
+    
+    # Split dataset
+    train_size = int((1 - val_split) * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    
+    # Get number of classes from all labels
+    all_labels = [dataset[i]['label'] for i in range(len(dataset))]
+    num_classes = len(np.unique(all_labels))
+    
+    if verbose:
+        print(f"Training with {num_classes} classes")
+        print(f"Train samples: {train_size}, Validation samples: {val_size}")
+    
+    # Initialize model
+    static_dims = {k: v for k, v in dataset.get_input_dims().items() if k in dataset.static_data}
+    temporal_dims = {k: v for k, v in dataset.get_input_dims().items() if k in dataset.temporal_data}
+    temporal_encoders = {k: 'lstm' for k in temporal_dims}
+    cat_dims, num_dims = dataset.get_metadata_dims()
+    
+    model = TemporalMultiOmicsBind(
+        static_input_dims=static_dims,
+        temporal_input_dims=temporal_dims,
+        temporal_encoders=temporal_encoders,
+        binding_modality=binding_modality,
+        cat_dims=cat_dims,
+        num_dims=num_dims,
+        embed_dim=embed_dim,
+        num_classes=num_classes,
+        dropout=dropout,
+        temporal_encoder_kwargs=temporal_encoder_kwargs
+    ).to(device)
+    
+    if verbose:
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f"Model initialized with {total_params:,} parameters ({trainable_params:,} trainable)")
+    
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    cls_criterion = nn.CrossEntropyLoss()
+    
+    history = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': []}
+    
+    for epoch in range(epochs):
+        # Training phase
+        model.train()
+        train_loss, train_correct, train_total = 0, 0, 0
+        
+        train_iter = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]") if verbose else train_loader
+        for batch in train_iter:
+            inputs = {k: (v.to(device) if isinstance(v, torch.Tensor) else v) 
+                     for k, v in batch.items()}
+            labels = inputs.pop('label').to(device)
+            
+            optimizer.zero_grad()
+            logits, embeddings = model(inputs, return_embeddings=True)
+            
+            # Combined loss: classification + contrastive
+            cls_loss = cls_criterion(logits, labels)
+            contrast_loss = contrastive_loss(embeddings, binding_modality=binding_modality)
+            loss = cls_loss + contrastive_weight * contrast_loss
+            
+            loss.backward()
+            optimizer.step()
+            
+            train_loss += loss.item()
+            train_correct += (logits.argmax(1) == labels).sum().item()
+            train_total += labels.size(0)
+            
+            if verbose and isinstance(train_iter, tqdm):
+                train_iter.set_postfix({'loss': f'{loss.item():.4f}'})
+        
+        # Validation phase
+        model.eval()
+        val_loss, val_correct, val_total = 0, 0, 0
+        
+        with torch.no_grad():
+            val_iter = tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]") if verbose else val_loader
+            for batch in val_iter:
+                inputs = {k: (v.to(device) if isinstance(v, torch.Tensor) else v) 
+                         for k, v in batch.items()}
+                labels = inputs.pop('label').to(device)
+                
+                logits, embeddings = model(inputs, return_embeddings=True)
+                cls_loss = cls_criterion(logits, labels)
+                contrast_loss = contrastive_loss(embeddings, binding_modality=binding_modality)
+                loss = cls_loss + contrastive_weight * contrast_loss
+                
+                val_loss += loss.item()
+                val_correct += (logits.argmax(1) == labels).sum().item()
+                val_total += labels.size(0)
+        
+        # Record metrics
+        history['train_loss'].append(train_loss / len(train_loader))
+        history['val_loss'].append(val_loss / len(val_loader))
+        history['train_acc'].append(train_correct / train_total)
+        history['val_acc'].append(val_correct / val_total)
+        
+        if verbose:
+            print(f"Epoch {epoch+1}/{epochs} - "
+                  f"Train Loss: {history['train_loss'][-1]:.4f}, "
+                  f"Train Acc: {history['train_acc'][-1]:.4f}, "
+                  f"Val Loss: {history['val_loss'][-1]:.4f}, "
+                  f"Val Acc: {history['val_acc'][-1]:.4f}")
+    
+    return model, history

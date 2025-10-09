@@ -6,10 +6,11 @@ This example demonstrates:
 2. Embedding space analysis with UMAP
 3. Feature importance ranking
 4. Cross-modal similarity analysis
+
+Updated to use the new high-level API functions.
 """
 
 import torch
-import torch.nn.functional as F
 import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader
@@ -18,51 +19,12 @@ from sklearn.metrics import classification_report
 from multiomicsbind import (
     MultiOmicsBindWithHead,
     MultiOmicsDataset,
+    compute_feature_importance,      # NEW: High-level API
+    compute_cross_modal_similarity,  # NEW: High-level API
     plot_embeddings_umap,
     plot_feature_importance,
     plot_confusion_matrix
 )
-
-
-def get_gradients(model, inputs, target_class=None):
-    """
-    Get gradients for feature attribution analysis.
-    
-    Args:
-        model: Trained MultiOmicsBind model
-        inputs: Input data batch
-        target_class: Target class for gradient computation
-        
-    Returns:
-        Dict of gradients for each modality
-    """
-    model.eval()
-    
-    # Enable gradients for inputs
-    for modality, data in inputs.items():
-        if isinstance(data, torch.Tensor) and modality != 'label':
-            data.requires_grad_(True)
-    
-    # Forward pass
-    logits, embeddings = model(inputs, return_embeddings=True)
-    
-    if target_class is None:
-        # Use predicted class
-        target_class = torch.argmax(logits, dim=1)
-    
-    # Compute gradients
-    gradients = {}
-    for modality, data in inputs.items():
-        if isinstance(data, torch.Tensor) and modality != 'label' and modality != 'metadata':
-            # Get gradient of logits w.r.t. input
-            grad = torch.autograd.grad(
-                outputs=logits[0, target_class[0]], 
-                inputs=data,
-                retain_graph=True
-            )[0]
-            gradients[modality] = grad.detach().cpu().numpy()
-    
-    return gradients
 
 
 def analyze_embeddings(model, dataloader, device):
@@ -116,33 +78,6 @@ def analyze_embeddings(model, dataloader, device):
     all_labels = np.concatenate(all_labels) if all_labels else None
     
     return all_embeddings, all_labels
-
-
-def compute_cross_modal_similarity(embeddings):
-    """
-    Compute cross-modal similarity matrices.
-    
-    Args:
-        embeddings: Dictionary of embeddings for each modality
-        
-    Returns:
-        Dictionary of similarity matrices
-    """
-    similarities = {}
-    modalities = list(embeddings.keys())
-    
-    for i, mod1 in enumerate(modalities):
-        for j, mod2 in enumerate(modalities):
-            if i < j:  # Avoid duplicate pairs
-                # Normalize embeddings
-                emb1_norm = F.normalize(torch.tensor(embeddings[mod1]), p=2, dim=1)
-                emb2_norm = F.normalize(torch.tensor(embeddings[mod2]), p=2, dim=1)
-                
-                # Compute cosine similarity
-                similarity = torch.mm(emb1_norm, emb2_norm.T).numpy()
-                similarities[f"{mod1}_vs_{mod2}"] = similarity
-    
-    return similarities
 
 
 def main():
@@ -225,43 +160,31 @@ def main():
     # 4. Feature importance analysis
     print("\n4. Analyzing feature importance...")
     
-    # Get a sample batch for gradient analysis
-    sample_batch = next(iter(dataloader))
-    sample_inputs = {}
-    for k, v in sample_batch.items():
-        if isinstance(v, dict):
-            sample_inputs[k] = {k2: v2[:1].to(device) for k2, v2 in v.items()}
-        elif isinstance(v, torch.Tensor):
-            sample_inputs[k] = v[:1].to(device)
-        else:
-            sample_inputs[k] = v
-    
+    # Use the new high-level API for feature importance
     try:
-        gradients = get_gradients(model, sample_inputs)
+        importance_dict, importance_df = compute_feature_importance(
+            model=model,
+            dataset=dataset,
+            device=device,
+            n_batches=10,
+            batch_size=16,
+            verbose=True
+        )
         
-        # Collect importance scores for all modalities
-        importance_dict = {}
-        for modality, grad in gradients.items():
-            feature_names = dataset.get_feature_names(modality)
-            if len(feature_names) >= grad.shape[1]:
-                importance_scores = np.mean(np.abs(grad), axis=0)
-                # Pad or trim to match feature names length
-                if len(importance_scores) < len(feature_names):
-                    importance_scores = np.pad(importance_scores, (0, len(feature_names) - len(importance_scores)))
-                elif len(importance_scores) > len(feature_names):
-                    importance_scores = importance_scores[:len(feature_names)]
-                
-                importance_dict[modality] = importance_scores
-                print(f"✓ Feature importance computed for {modality}")
+        print(f"✓ Feature importance computed for all modalities")
+        print(f"  Total features analyzed: {len(importance_df)}")
         
-        # Plot all feature importances together
-        if importance_dict:
-            plot_feature_importance(
-                importance_dict,
-                save_path='feature_importance_all.png',
-                top_k=20
-            )
-            print(f"✓ Feature importance plot saved")
+        # Plot feature importances
+        plot_feature_importance(
+            importance_dict,
+            save_path='feature_importance_all.png',
+            top_k=20
+        )
+        print(f"✓ Feature importance plot saved")
+        
+        # Save feature importance DataFrame
+        importance_df.to_csv('feature_importance.csv', index=False)
+        print(f"✓ Feature importance CSV saved")
     
     except Exception as e:
         print(f"✗ Feature importance analysis failed: {e}")
@@ -269,9 +192,13 @@ def main():
     # 5. Cross-modal similarity analysis
     print("\n5. Computing cross-modal similarities...")
     
-    similarities = compute_cross_modal_similarity(embeddings)
+    # Use the new high-level API for cross-modal similarity
+    similarities = compute_cross_modal_similarity(
+        embeddings_dict=embeddings,
+        verbose=True
+    )
     
-    print("Cross-modal similarity statistics:")
+    print("\nCross-modal similarity statistics:")
     for pair, sim_matrix in similarities.items():
         mean_sim = np.mean(np.diag(sim_matrix))  # Diagonal = same sample similarity
         print(f"  - {pair}: {mean_sim:.3f} (same sample similarity)")
@@ -317,11 +244,19 @@ def main():
         )
         print("✓ Confusion matrix saved as 'confusion_matrix.png'")
     
-    print("\nAdvanced analysis completed!")
+    print("\n" + "=" * 50)
+    print("ADVANCED ANALYSIS COMPLETE!")
+    print("=" * 50)
+    
     print("\nGenerated files:")
     print("- embeddings_umap.png (UMAP visualization)")
-    print("- feature_importance_*.png (feature importance plots)")
+    print("- feature_importance_all.png (feature importance plots)")
+    print("- feature_importance.csv (detailed importance scores)")
     print("- confusion_matrix.png (classification results)")
+    
+    print("\nUsing new high-level API functions:")
+    print("✓ compute_feature_importance() - Gradient-based analysis")
+    print("✓ compute_cross_modal_similarity() - Cross-modal analysis")
 
 
 if __name__ == "__main__":

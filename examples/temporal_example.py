@@ -9,23 +9,25 @@ Scenario:
 - Transcriptomics and cell painting measured at baseline (t0)
 - Proteomics measured at 5 timepoints (0h, 1h, 2h, 4h, 8h) after treatment
 
-The example uses LSTM encoders (recommended default) for temporal modalities,
-which are optimal for typical biological time series with sequential dependencies.
+The example uses the new high-level API functions for simplified workflow.
 """
 
 import torch
-import torch.nn as nn
 import numpy as np
 import pandas as pd
-from torch.utils.data import DataLoader
-from sklearn.metrics import classification_report, accuracy_score
-import matplotlib.pyplot as plt
-from tqdm import tqdm
 
+# Import the new high-level functions
 from multiomicsbind import (
-    TemporalMultiOmicsBind, 
     TemporalMultiOmicsDataset,
-    contrastive_loss
+    TemporalMultiOmicsBind,
+    train_temporal_model,          # NEW: One-line training
+    evaluate_temporal_model,        # NEW: One-line evaluation
+    compute_feature_importance,     # NEW: Feature importance analysis
+    compute_cross_modal_similarity, # NEW: Cross-modal similarity
+    plot_training_history_detailed, # NEW: Detailed training plots
+    plot_cross_modal_similarity_matrices, # NEW: Similarity heatmaps
+    fix_nan_values,                # NEW: NaN handling utility
+    create_analysis_report         # NEW: Comprehensive analysis report
 )
 
 
@@ -178,250 +180,8 @@ def create_synthetic_temporal_data(n_samples=1000, save_files=True):
     }
 
 
-def train_temporal_model(dataset, device, epochs=20):
-    """Train the temporal multi-omics model."""
-    print(f"\nTraining temporal model on {device}...")
-    
-    # Create data loader
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
-    
-    # Get input dimensions
-    static_dims = {k: v for k, v in dataset.get_input_dims().items() 
-                  if k in dataset.static_data}
-    temporal_dims = {k: v for k, v in dataset.get_input_dims().items() 
-                    if k in dataset.temporal_data}
-    
-    print(f"Static modalities: {static_dims}")
-    print(f"Temporal modalities: {temporal_dims}")
-    
-    # Define temporal encoders (LSTM is recommended for biological time series)
-    temporal_encoders = {}
-    for modality in temporal_dims.keys():
-        temporal_encoders[modality] = 'lstm'  # LSTM: Best for typical biological time series (3-20 timepoints)
-        
-        # Alternative encoders for special cases:
-        # temporal_encoders[modality] = 'transformer'    # For long sequences (>20 timepoints)
-        # temporal_encoders[modality] = 'attention_pool' # For interpretable attention weights
-        # temporal_encoders[modality] = 'aggregation'    # For simple temporal patterns
-    
-    # Create model
-    cat_dims, num_dims = dataset.get_metadata_dims()
-    
-    model = TemporalMultiOmicsBind(
-        static_input_dims=static_dims,
-        temporal_input_dims=temporal_dims,
-        temporal_encoders=temporal_encoders,
-        binding_modality='transcriptomics',  # Use transcriptomics as anchor
-        cat_dims=cat_dims,
-        num_dims=num_dims,
-        embed_dim=256,
-        num_classes=3,  # No response, Partial, Full
-        dropout=0.2,
-        temporal_encoder_kwargs={
-            'proteomics': {
-                'num_layers': 2,
-                'bidirectional': True
-            }
-        }
-    ).to(device)
-    
-    print(f"Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
-    
-    # Optimizer and loss
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-    
-    classification_loss_fn = nn.CrossEntropyLoss()
-    
-    # Training history
-    history = {
-        'total_loss': [],
-        'contrastive_loss': [],
-        'classification_loss': [],
-        'accuracy': []
-    }
-    
-    model.train()
-    for epoch in range(epochs):
-        epoch_losses = {'total': [], 'contrastive': [], 'classification': []}
-        epoch_correct = 0
-        epoch_total = 0
-        
-        pbar = tqdm(dataloader, desc=f'Epoch {epoch+1}/{epochs}')
-        for batch in pbar:
-            # Move batch to device
-            inputs = {}
-            for key, value in batch.items():
-                if isinstance(value, torch.Tensor):
-                    inputs[key] = value.to(device)
-                elif isinstance(value, dict):
-                    inputs[key] = {k: v.to(device) if isinstance(v, torch.Tensor) else v 
-                                 for k, v in value.items()}
-                else:
-                    inputs[key] = value
-            
-            optimizer.zero_grad()
-            
-            # Forward pass
-            logits, embeddings = model(inputs, return_embeddings=True)
-            
-            # Classification loss
-            if 'label' in inputs:
-                clf_loss = classification_loss_fn(logits, inputs['label'])
-                
-                # Accuracy
-                _, predicted = torch.max(logits.data, 1)
-                epoch_total += inputs['label'].size(0)
-                epoch_correct += (predicted == inputs['label']).sum().item()
-            else:
-                clf_loss = torch.tensor(0.0, device=device)
-            
-            # Contrastive loss
-            cont_loss = model.compute_contrastive_loss(embeddings, temperature=0.07)
-            
-            # Total loss
-            total_loss = cont_loss + clf_loss
-            
-            # Backward pass
-            total_loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
-            
-            # Record losses
-            epoch_losses['total'].append(total_loss.item())
-            epoch_losses['contrastive'].append(cont_loss.item())
-            epoch_losses['classification'].append(clf_loss.item())
-            
-            # Update progress bar
-            pbar.set_postfix({
-                'Loss': f"{total_loss.item():.4f}",
-                'Con': f"{cont_loss.item():.4f}",
-                'Clf': f"{clf_loss.item():.4f}"
-            })
-        
-        # Calculate epoch metrics
-        epoch_accuracy = epoch_correct / epoch_total if epoch_total > 0 else 0
-        avg_total_loss = np.mean(epoch_losses['total'])
-        avg_cont_loss = np.mean(epoch_losses['contrastive'])
-        avg_clf_loss = np.mean(epoch_losses['classification'])
-        
-        # Update history
-        history['total_loss'].append(avg_total_loss)
-        history['contrastive_loss'].append(avg_cont_loss)
-        history['classification_loss'].append(avg_clf_loss)
-        history['accuracy'].append(epoch_accuracy)
-        
-        # Update learning rate
-        scheduler.step()
-        
-        print(f"Epoch [{epoch+1}/{epochs}] - "
-              f"Loss: {avg_total_loss:.4f}, "
-              f"Contrastive: {avg_cont_loss:.4f}, "
-              f"Classification: {avg_clf_loss:.4f}, "
-              f"Accuracy: {epoch_accuracy:.4f}, "
-              f"LR: {scheduler.get_last_lr()[0]:.2e}")
-    
-    return model, history
-
-
-def evaluate_temporal_model(model, dataset, device):
-    """Evaluate the trained temporal model."""
-    print("\nEvaluating temporal model...")
-    
-    dataloader = DataLoader(dataset, batch_size=64, shuffle=False)
-    
-    model.eval()
-    all_predictions = []
-    all_labels = []
-    all_embeddings = {modality: [] for modality in 
-                     list(dataset.static_data.keys()) + list(dataset.temporal_data.keys())}
-    
-    with torch.no_grad():
-        for batch in dataloader:
-            # Move batch to device
-            inputs = {}
-            for key, value in batch.items():
-                if isinstance(value, torch.Tensor):
-                    inputs[key] = value.to(device)
-                elif isinstance(value, dict):
-                    inputs[key] = {k: v.to(device) if isinstance(v, torch.Tensor) else v 
-                                 for k, v in value.items()}
-                else:
-                    inputs[key] = value
-            
-            # Get predictions and embeddings
-            logits, embeddings = model(inputs, return_embeddings=True)
-            
-            # Store predictions
-            if 'label' in inputs:
-                predictions = torch.argmax(logits, dim=1)
-                all_predictions.extend(predictions.cpu().numpy())
-                all_labels.extend(inputs['label'].cpu().numpy())
-            
-            # Store embeddings
-            for modality, embedding in embeddings.items():
-                if modality != 'metadata':
-                    all_embeddings[modality].append(embedding.cpu().numpy())
-    
-    # Calculate metrics
-    if all_labels:
-        accuracy = accuracy_score(all_labels, all_predictions)
-        print(f"Overall Accuracy: {accuracy:.4f}")
-        
-        # Classification report
-        class_names = ['No Response', 'Partial Response', 'Full Response']
-        print("\nClassification Report:")
-        print(classification_report(all_labels, all_predictions, target_names=class_names))
-    
-    # Concatenate embeddings
-    for modality in all_embeddings:
-        if all_embeddings[modality]:
-            all_embeddings[modality] = np.vstack(all_embeddings[modality])
-    
-    return all_embeddings, all_labels, all_predictions
-
-
-def analyze_temporal_patterns(model, dataset, device):
-    """Analyze temporal patterns in the proteomics data."""
-    print("\nAnalyzing temporal patterns...")
-    
-    # Get a few samples for analysis
-    sample_indices = [0, 100, 200]  # Different response types
-    
-    model.eval()
-    with torch.no_grad():
-        for idx in sample_indices:
-            sample = dataset[idx]
-            
-            # Move to device
-            inputs = {}
-            for key, value in sample.items():
-                if isinstance(value, torch.Tensor):
-                    inputs[key] = value.unsqueeze(0).to(device)
-                elif isinstance(value, dict):
-                    inputs[key] = {k: v.unsqueeze(0).to(device) if isinstance(v, torch.Tensor) else v 
-                                 for k, v in value.items()}
-                else:
-                    inputs[key] = value
-            
-            # Get prediction and embeddings
-            logits, embeddings = model(inputs, return_embeddings=True)
-            predicted_class = torch.argmax(logits, dim=1).item()
-            actual_class = sample['label'].item() if 'label' in sample else -1
-            
-            print(f"\nSample {idx}:")
-            print(f"  Actual class: {actual_class}, Predicted class: {predicted_class}")
-            print(f"  Proteomics shape: {sample['proteomics'].shape}")
-            print(f"  Sequence length: {sample['proteomics_seq_len'].item()}")
-            
-            # Show temporal pattern for first few proteins
-            proteomics_data = sample['proteomics'][:5, :5].numpy()  # First 5 timepoints, 5 proteins
-            print(f"  Sample proteomics temporal pattern:")
-            print(f"    {proteomics_data}")
-
-
 def main():
-    """Main function demonstrating temporal multi-omics integration."""
+    """Main function demonstrating temporal multi-omics integration with new API."""
     print("Temporal Multi-Omics Integration with MultiOmicsBind")
     print("=" * 60)
     
@@ -451,71 +211,147 @@ def main():
     print(f"- Temporal modalities: {list(dataset.temporal_data.keys())}")
     print(f"- Temporal info: {dataset.get_temporal_info()}")
     
-    # Train model
-    model, history = train_temporal_model(dataset, device, epochs=15)
+    # ============================================
+    # NEW SIMPLIFIED API - Training in one line!
+    # ============================================
+    print("\n" + "=" * 60)
+    print("USING NEW HIGH-LEVEL API FUNCTIONS")
+    print("=" * 60)
+    
+    # Check and fix NaN values (one line!)
+    print("\n1. Checking for NaN values...")
+    dataset = fix_nan_values(dataset, verbose=True)
+    
+    # Train model (one line!)
+    print("\n2. Training model with train_temporal_model()...")
+    model, history = train_temporal_model(
+        dataset=dataset,
+        device=device,
+        binding_modality='transcriptomics',
+        embed_dim=256,
+        epochs=15,
+        batch_size=32,
+        lr=1e-3,
+        dropout=0.2,
+        val_split=0.2,
+        verbose=True
+    )
     
     # Save model
     torch.save(model.state_dict(), 'temporal_multiomicsbind.pth')
-    print("\nModel saved as 'temporal_multiomicsbind.pth'")
+    print("\n✓ Model saved as 'temporal_multiomicsbind.pth'")
     
-    # Evaluate model
-    embeddings, labels, predictions = evaluate_temporal_model(model, dataset, device)
+    # Evaluate model (one line!)
+    print("\n3. Evaluating model with evaluate_temporal_model()...")
+    embeddings, labels, predictions = evaluate_temporal_model(
+        model=model,
+        dataset=dataset,
+        device=device,
+        batch_size=64
+    )
+    print(f"✓ Evaluation complete - Accuracy: {(predictions == labels).mean():.4f}")
     
-    # Analyze temporal patterns
-    analyze_temporal_patterns(model, dataset, device)
+    # Compute feature importance (one line!)
+    print("\n4. Computing feature importance with compute_feature_importance()...")
+    importance_dict, importance_df = compute_feature_importance(
+        model=model,
+        dataset=dataset,
+        device=device,
+        n_batches=10,
+        verbose=True
+    )
     
-    # Plot training history
-    print("\nPlotting training history...")
+    # Save feature importance
+    importance_df.to_csv('temporal_feature_importance.csv', index=False)
+    print("✓ Feature importance saved to 'temporal_feature_importance.csv'")
     
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    # Compute cross-modal similarity (one line!)
+    print("\n5. Computing cross-modal similarity with compute_cross_modal_similarity()...")
+    similarity_matrices = compute_cross_modal_similarity(
+        embeddings_dict=embeddings,
+        verbose=True
+    )
     
-    # Total loss
-    axes[0, 0].plot(history['total_loss'])
-    axes[0, 0].set_title('Total Loss')
-    axes[0, 0].set_xlabel('Epoch')
-    axes[0, 0].set_ylabel('Loss')
-    axes[0, 0].grid(True, alpha=0.3)
+    # ============================================
+    # VISUALIZATION WITH NEW API
+    # ============================================
+    print("\n" + "=" * 60)
+    print("GENERATING VISUALIZATIONS")
+    print("=" * 60)
     
-    # Contrastive loss
-    axes[0, 1].plot(history['contrastive_loss'], color='red')
-    axes[0, 1].set_title('Contrastive Loss')
-    axes[0, 1].set_xlabel('Epoch')
-    axes[0, 1].set_ylabel('Loss')
-    axes[0, 1].grid(True, alpha=0.3)
+    # Plot detailed training history (one line!)
+    print("\n6. Plotting training history with plot_training_history_detailed()...")
+    plot_training_history_detailed(
+        history=history,
+        save_path='temporal_training_history_detailed.png'
+    )
+    print("✓ Saved to 'temporal_training_history_detailed.png'")
     
-    # Classification loss
-    axes[1, 0].plot(history['classification_loss'], color='green')
-    axes[1, 0].set_title('Classification Loss')
-    axes[1, 0].set_xlabel('Epoch')
-    axes[1, 0].set_ylabel('Loss')
-    axes[1, 0].grid(True, alpha=0.3)
+    # Plot cross-modal similarity matrices (one line!)
+    print("\n7. Plotting similarity matrices with plot_cross_modal_similarity_matrices()...")
+    plot_cross_modal_similarity_matrices(
+        similarity_matrices=similarity_matrices,
+        save_path='temporal_similarity_matrices.png'
+    )
+    print("✓ Saved to 'temporal_similarity_matrices.png'")
     
-    # Accuracy
-    axes[1, 1].plot(history['accuracy'], color='purple')
-    axes[1, 1].set_title('Training Accuracy')
-    axes[1, 1].set_xlabel('Epoch')
-    axes[1, 1].set_ylabel('Accuracy')
-    axes[1, 1].grid(True, alpha=0.3)
+    # ============================================
+    # COMPREHENSIVE ANALYSIS REPORT (ONE LINE!)
+    # ============================================
+    print("\n" + "=" * 60)
+    print("GENERATING COMPREHENSIVE ANALYSIS REPORT")
+    print("=" * 60)
     
-    plt.suptitle('Temporal MultiOmicsBind Training History', fontsize=16)
-    plt.tight_layout()
-    plt.savefig('temporal_training_history.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    # Generate full analysis report (one line!)
+    print("\n8. Creating comprehensive report with create_analysis_report()...")
+    report = create_analysis_report(
+        model=model,
+        dataset=dataset,
+        device=device,
+        output_dir='./temporal_analysis_results',
+        compute_importance=True,
+        compute_similarity=True,
+        n_importance_batches=10,
+        verbose=True
+    )
     
-    print("\nTemporal multi-omics integration completed!")
+    print("\n" + "=" * 60)
+    print("ANALYSIS COMPLETE!")
+    print("=" * 60)
+    
     print("\nKey findings:")
     print("- Successfully integrated static (transcriptomics, cell painting) and temporal (proteomics) data")
     print("- LSTM encoder effectively captured temporal proteomics patterns")
     print("- Binding modality approach maintained efficiency with mixed data types")
-    print("- Model achieved good classification performance on response prediction")
+    print(f"- Model achieved {report['metrics']['accuracy']:.4f} accuracy on response prediction")
     
     print("\nGenerated files:")
     print("- temporal_multiomicsbind.pth (trained model)")
-    print("- temporal_training_history.png (training curves)")
-    print("- transcriptomics_baseline.csv, cell_painting_baseline.csv (static data)")
-    print("- proteomics_timeseries.csv (temporal data)")
-    print("- temporal_metadata.csv (sample metadata)")
+    print("- temporal_training_history_detailed.png (training curves)")
+    print("- temporal_similarity_matrices.png (cross-modal similarity)")
+    print("- temporal_feature_importance.csv (feature importance scores)")
+    print("- temporal_analysis_results/ (comprehensive analysis directory)")
+    print("  ├── training_history.png")
+    print("  ├── similarity_matrices.png")
+    print("  ├── feature_importance.png")
+    print("  ├── feature_importance.csv")
+    print("  ├── similarity_stats.csv")
+    print("  └── analysis_summary.txt")
+    
+    print("\n" + "=" * 60)
+    print("NEW API DEMONSTRATION COMPLETE!")
+    print("=" * 60)
+    print("\nThe new high-level functions simplify the workflow:")
+    print("✓ train_temporal_model() - Complete training pipeline")
+    print("✓ evaluate_temporal_model() - Full model evaluation")
+    print("✓ compute_feature_importance() - Gradient-based importance")
+    print("✓ compute_cross_modal_similarity() - Cross-modal analysis")
+    print("✓ plot_training_history_detailed() - Enhanced visualizations")
+    print("✓ plot_cross_modal_similarity_matrices() - Similarity heatmaps")
+    print("✓ fix_nan_values() - Robust NaN handling")
+    print("✓ create_analysis_report() - One-line comprehensive analysis")
 
 
 if __name__ == "__main__":
+    main()
     main()

@@ -846,3 +846,216 @@ def plot_temporal_architecture(
         print(f"Temporal architecture diagram saved to {save_path}")
     else:
         plt.show()
+
+
+def plot_training_history_detailed(
+    history: Dict[str, List[float]],
+    save_path: Optional[str] = None,
+    figsize: Tuple[int, int] = (15, 5)
+) -> None:
+    """
+    Plot detailed training history with loss and accuracy curves.
+    
+    Creates a comprehensive visualization of the training process with both
+    loss and accuracy curves for training and validation sets. Includes grid,
+    proper scaling, and summary statistics.
+    
+    Args:
+        history: Dictionary containing training history with keys:
+            - 'train_loss': List of training losses per epoch
+            - 'val_loss': List of validation losses per epoch
+            - 'train_acc': List of training accuracies per epoch
+            - 'val_acc': List of validation accuracies per epoch
+        save_path (Optional[str]): Path to save the figure. If None, displays the plot.
+        figsize (Tuple[int, int]): Figure size (default: (15, 5))
+    
+    Example:
+        >>> from multiomicsbind import train_temporal_model, plot_training_history_detailed
+        >>> model, history = train_temporal_model(dataset, device, epochs=20)
+        >>> plot_training_history_detailed(history, save_path='training_history.png')
+    """
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    
+    epochs = range(1, len(history['train_loss']) + 1)
+    
+    # Plot loss
+    ax1.plot(epochs, history['train_loss'], label='Train Loss', marker='o', linewidth=2)
+    ax1.plot(epochs, history['val_loss'], label='Val Loss', marker='s', linewidth=2)
+    ax1.set_xlabel('Epoch', fontsize=12)
+    ax1.set_ylabel('Loss', fontsize=12)
+    ax1.set_title('Training and Validation Loss', fontsize=14, fontweight='bold')
+    ax1.legend(fontsize=10)
+    ax1.grid(True, alpha=0.3)
+    ax1.set_ylim(bottom=0)
+    
+    # Plot accuracy
+    ax2.plot(epochs, history['train_acc'], label='Train Accuracy', marker='o', linewidth=2)
+    ax2.plot(epochs, history['val_acc'], label='Val Accuracy', marker='s', linewidth=2)
+    ax2.set_xlabel('Epoch', fontsize=12)
+    ax2.set_ylabel('Accuracy', fontsize=12)
+    ax2.set_title('Training and Validation Accuracy', fontsize=14, fontweight='bold')
+    ax2.legend(fontsize=10)
+    ax2.grid(True, alpha=0.3)
+    ax2.set_ylim([0, 1])
+    
+    # Add summary text
+    best_val_acc = max(history['val_acc'])
+    best_epoch = history['val_acc'].index(best_val_acc) + 1
+    final_val_acc = history['val_acc'][-1]
+    
+    summary_text = (f"Best Val Acc: {best_val_acc:.4f} (Epoch {best_epoch})\n"
+                   f"Final Val Acc: {final_val_acc:.4f}")
+    fig.text(0.5, 0.02, summary_text, ha='center', fontsize=10, 
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
+    
+    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.12)
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Training history plot saved to {save_path}")
+    else:
+        plt.show()
+
+
+def plot_cross_modal_similarity_matrices(
+    similarity_matrices: Dict[str, np.ndarray],
+    save_path: Optional[str] = None,
+    figsize: Optional[Tuple[int, int]] = None,
+    cmap: str = 'viridis'
+) -> None:
+    """
+    Visualize cross-modal similarity matrices as heatmaps.
+    
+    Creates heatmap visualizations of pairwise similarity between embeddings
+    from different modalities. Useful for understanding how well different
+    data types align in the learned embedding space.
+    
+    Args:
+        similarity_matrices: Dictionary mapping comparison names (e.g., 'mod1_vs_mod2')
+            to similarity matrices of shape (n_samples, n_samples)
+        save_path (Optional[str]): Path to save the figure. If None, displays the plot.
+        figsize (Optional[Tuple[int, int]]): Figure size. If None, auto-calculated based
+            on number of comparisons.
+        cmap (str): Colormap for heatmaps (default: 'viridis')
+    
+    Example:
+        >>> from multiomicsbind import (evaluate_temporal_model, 
+        ...                            compute_cross_modal_similarity,
+        ...                            plot_cross_modal_similarity_matrices)
+        >>> embeddings, labels, predictions = evaluate_temporal_model(model, dataset, device)
+        >>> similarity_matrices = compute_cross_modal_similarity(embeddings)
+        >>> plot_cross_modal_similarity_matrices(similarity_matrices, 
+        ...                                      save_path='similarity_matrices.png')
+    """
+    n_comparisons = len(similarity_matrices)
+    
+    if figsize is None:
+        figsize = (6 * n_comparisons, 5)
+    
+    fig, axes = plt.subplots(1, n_comparisons, figsize=figsize)
+    if n_comparisons == 1:
+        axes = [axes]
+    
+    for idx, (comparison, sim_matrix) in enumerate(similarity_matrices.items()):
+        # Plot heatmap
+        im = axes[idx].imshow(sim_matrix, cmap=cmap, aspect='auto', vmin=-1, vmax=1)
+        axes[idx].set_title(f'Cross-Modal Similarity\n{comparison.replace("_", " ").title()}', 
+                           fontsize=12, fontweight='bold')
+        axes[idx].set_xlabel('Sample Index', fontsize=10)
+        axes[idx].set_ylabel('Sample Index', fontsize=10)
+        
+        # Add colorbar
+        cbar = plt.colorbar(im, ax=axes[idx], label='Cosine Similarity')
+        
+        # Add mean similarity annotation
+        mean_sim = np.mean(sim_matrix)
+        axes[idx].text(0.5, -0.15, f'Mean: {mean_sim:.4f}', 
+                      transform=axes[idx].transAxes, ha='center', fontsize=9,
+                      bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Cross-modal similarity matrices saved to {save_path}")
+    else:
+        plt.show()
+
+
+def plot_feature_importance_distribution(
+    importance_df: pd.DataFrame,
+    top_k: int = 20,
+    save_path: Optional[str] = None,
+    figsize: Tuple[int, int] = (12, 6)
+) -> None:
+    """
+    Plot feature importance distribution by modality with top features.
+    
+    Creates visualizations showing both the overall importance distribution
+    across modalities and the top individual features.
+    
+    Args:
+        importance_df: DataFrame from compute_feature_importance with columns:
+            - 'modality': Name of the modality
+            - 'feature_name': Name of the feature
+            - 'importance': Importance score
+        top_k (int): Number of top features to show (default: 20)
+        save_path (Optional[str]): Path to save the figure. If None, displays the plot.
+        figsize (Tuple[int, int]): Figure size (default: (12, 6))
+    
+    Example:
+        >>> from multiomicsbind import (compute_feature_importance, 
+        ...                            plot_feature_importance_distribution)
+        >>> importance_dict, importance_df = compute_feature_importance(model, dataset, device)
+        >>> plot_feature_importance_distribution(importance_df, top_k=30,
+        ...                                     save_path='feature_importance.png')
+    """
+    # Get top features
+    top_features = importance_df.nlargest(top_k, 'importance')
+    
+    # Create figure with two subplots
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(1, 2, width_ratios=[1, 1.5])
+    ax1 = fig.add_subplot(gs[0])
+    ax2 = fig.add_subplot(gs[1])
+    
+    # Plot 1: Distribution by modality
+    modality_stats = importance_df.groupby('modality')['importance'].agg(['mean', 'std', 'max'])
+    modality_stats = modality_stats.sort_values('mean', ascending=False)
+    
+    x = np.arange(len(modality_stats))
+    ax1.bar(x, modality_stats['mean'], yerr=modality_stats['std'], 
+           capsize=5, color='steelblue', alpha=0.7, label='Mean ± Std')
+    ax1.scatter(x, modality_stats['max'], color='red', s=100, zorder=5, label='Max')
+    
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(modality_stats.index, rotation=45, ha='right')
+    ax1.set_xlabel('Modality', fontsize=11)
+    ax1.set_ylabel('Feature Importance', fontsize=11)
+    ax1.set_title('Importance Distribution by Modality', fontsize=12, fontweight='bold')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3, axis='y')
+    
+    # Plot 2: Top features
+    colors_map = plt.cm.Set3(np.linspace(0, 1, len(top_features['modality'].unique())))
+    modality_to_color = {mod: colors_map[i] for i, mod in enumerate(top_features['modality'].unique())}
+    colors = [modality_to_color[mod] for mod in top_features['modality']]
+    
+    y_pos = np.arange(len(top_features))
+    ax2.barh(y_pos, top_features['importance'], color=colors)
+    ax2.set_yticks(y_pos)
+    ax2.set_yticklabels([f"{row['feature_name'][:30]} ({row['modality']})" 
+                         for _, row in top_features.iterrows()], fontsize=8)
+    ax2.set_xlabel('Importance Score', fontsize=11)
+    ax2.set_title(f'Top {top_k} Most Important Features', fontsize=12, fontweight='bold')
+    ax2.grid(True, alpha=0.3, axis='x')
+    ax2.invert_yaxis()
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Feature importance distribution saved to {save_path}")
+    else:
+        plt.show()
