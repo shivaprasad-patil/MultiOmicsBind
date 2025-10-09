@@ -320,7 +320,8 @@ def plot_embeddings_umap(
     labels: np.ndarray,
     save_path: Optional[str] = None,
     figsize: Tuple[int, int] = (10, 8),
-    class_names: Optional[List[str]] = None
+    class_names: Optional[List[str]] = None,
+    title: Optional[str] = None
 ) -> None:
     """
     Plot UMAP visualization of embeddings.
@@ -331,6 +332,7 @@ def plot_embeddings_umap(
         save_path (Optional[str]): Path to save the figure
         figsize (Tuple[int, int]): Figure size
         class_names (Optional[List[str]]): Names for each class/label
+        title (Optional[str]): Custom title for the plot
     """
     try:
         import umap
@@ -359,7 +361,9 @@ def plot_embeddings_umap(
                        c=[colors[i]], alpha=0.7, s=50, 
                        label=label_name)
         
-        plt.title('UMAP Visualization of Embeddings', fontsize=16, fontweight='bold')
+        # Use custom title if provided, otherwise use default
+        plot_title = title if title else 'UMAP Visualization of Embeddings'
+        plt.title(plot_title, fontsize=16, fontweight='bold')
         plt.xlabel('UMAP 1')
         plt.ylabel('UMAP 2')
         plt.grid(True, alpha=0.3)
