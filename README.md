@@ -2,7 +2,28 @@
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-1.9+-red.svg)](https://pytorch.org/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://ope## 📊 Examples
+
+### Quick Start with Simplified API
+
+```python
+# One-line training and analysis (NEW!)
+python examples/temporal_example.py
+```
+
+**Demonstrates:**
+- `train_temporal_model()` - Complete training pipeline
+- `evaluate_temporal_model()` - Full evaluation with embeddings
+- `compute_feature_importance()` - Gradient-based feature analysis
+- `compute_cross_modal_similarity()` - Cross-modal alignment analysis
+- `create_analysis_report()` - Comprehensive report generation
+
+### Basic Integration
+
+```python
+# Run the basic example
+python examples/basic_example.py
+```org/licenses/Apache-2.0)
 
 **MultiOmicsBind** is a deep learning framework for integrating and analyzing multi-omics data using contrastive learning and neural encoders. Inspired by [ImageBind](https://imagebind.metademolab.com) from Meta AI, it enables unified representation learning across different biological data modalities.
 
@@ -15,8 +36,22 @@ Multi-omics data integration is a critical challenge in systems biology and prec
 - **📊 Contrastive Learning**: Self-supervised alignment of multi-modal biological data
 - **🧪 Flexible Architecture**: Supporting any combination of omics data types and metadata
 - **🚀 Downstream Tasks**: Enabling both unsupervised exploration and supervised prediction
+- **⚡ Simplified API** *(NEW)*: Train and analyze models with single function calls
 
-## 🏗️ Architecture
+## ✨ What's New in v0.1.2
+
+**High-Level API Functions** - Dramatically simplified workflows:
+
+- `train_temporal_model()` - Complete training pipeline (replaces 150+ lines)
+- `evaluate_temporal_model()` - Full evaluation with embeddings
+- `compute_feature_importance()` - Gradient-based feature analysis
+- `compute_cross_modal_similarity()` - Cross-modal alignment analysis
+- `create_analysis_report()` - One-line comprehensive analysis
+- Enhanced visualizations and utilities
+
+**Result**: 99% less boilerplate code while maintaining full flexibility!
+
+## 🧬 Overview
 
 ![MultiOmicsBind Architecture](architecture.png)
 
@@ -54,7 +89,53 @@ cd MultiOmicsBind
 pip install -e .
 ```
 
-### Basic Usage
+### ⚡ Simplified API (Recommended)
+
+**New in v0.1.2**: High-level functions for rapid prototyping and analysis!
+
+```python
+from multiomicsbind import (
+    TemporalMultiOmicsDataset,
+    train_temporal_model,           # One-line training
+    evaluate_temporal_model,         # One-line evaluation
+    compute_feature_importance,      # Gradient-based analysis
+    compute_cross_modal_similarity,  # Cross-modal analysis
+    create_analysis_report           # Comprehensive analysis
+)
+
+# Load your data
+dataset = TemporalMultiOmicsDataset(
+    static_data_paths={'transcriptomics': 'genes.csv'},
+    temporal_data_paths={'proteomics': 'proteins_timeseries.csv'},
+    temporal_metadata={'proteomics': {'timepoints': [0,1,2,4,8]}},
+    metadata_path='metadata.csv',
+    label_col='response'
+)
+
+# Train model (one line!)
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+model, history = train_temporal_model(dataset, device, epochs=20)
+
+# Generate comprehensive analysis report (one line!)
+report = create_analysis_report(
+    model, dataset, device,
+    output_dir='./results',
+    compute_importance=True,
+    compute_similarity=True
+)
+
+print(f"Accuracy: {report['accuracy']:.4f}")
+print(f"Results saved to: {report['output_dir']}")
+```
+
+**Benefits:**
+- ✅ **99% less boilerplate** - Train models in 1 line instead of 150+
+- ✅ **Automatic data splitting** - Built-in train/val split
+- ✅ **Feature importance** - Gradient-based analysis with one call
+- ✅ **Cross-modal analysis** - Understand modality alignment
+- ✅ **Comprehensive reports** - Generate plots, CSVs, and statistics automatically
+
+### Basic Usage (Low-Level API)
 
 ```python
 import torch
@@ -291,6 +372,11 @@ python examples/flexible_modalities_example.py
 python examples/temporal_example.py
 ```
 
+**NEW: Now uses simplified API!**
+- Training: `train_temporal_model()` replaces 150+ lines of code
+- Evaluation: `evaluate_temporal_model()` replaces 50+ lines
+- Analysis: `create_analysis_report()` generates comprehensive results
+
 ## ⏰ Temporal Multi-Omics
 
 MultiOmicsBind supports **temporal multi-omics data** where modalities are measured at different timepoints:
@@ -456,6 +542,119 @@ plot_training_history(model.training_history, save_path="training.png")
 - **API Reference**: Inline documentation for all classes and functions
 
 ## 🔧 Complete API Reference
+
+### 🌟 High-Level API (New!)
+
+#### Training
+```python
+from multiomicsbind import train_temporal_model
+
+# Complete training pipeline with one function call
+model, history = train_temporal_model(
+    dataset=dataset,                  # TemporalMultiOmicsDataset instance
+    device=device,                    # 'cuda' or 'cpu'
+    epochs=20,                        # Training epochs
+    batch_size=32,                    # Batch size
+    lr=1e-4,                         # Learning rate
+    binding_modality='transcriptomics', # Anchor modality
+    embed_dim=256,                    # Embedding dimension
+    dropout=0.2,                      # Dropout rate
+    val_split=0.2,                    # Validation split
+    verbose=True                      # Print progress
+)
+# Returns: (trained_model, history_dict)
+```
+
+#### Evaluation
+```python
+from multiomicsbind import evaluate_temporal_model
+
+# Full model evaluation with embeddings extraction
+embeddings, labels, predictions = evaluate_temporal_model(
+    model=model,                      # Trained model
+    dataset=dataset,                  # Dataset to evaluate
+    device=device,                    # Device
+    batch_size=32                     # Batch size
+)
+# Returns: (embeddings_dict, labels_array, predictions_array)
+```
+
+#### Feature Importance
+```python
+from multiomicsbind import compute_feature_importance
+
+# Gradient-based feature importance analysis
+importance_dict, importance_df = compute_feature_importance(
+    model=model,                      # Trained model
+    dataset=dataset,                  # Dataset
+    device=device,                    # Device
+    n_batches=10,                     # Number of batches to analyze
+    verbose=True                      # Print progress
+)
+# Returns: (importance_dict, importance_dataframe)
+```
+
+#### Cross-Modal Similarity
+```python
+from multiomicsbind import compute_cross_modal_similarity
+
+# Compute pairwise cosine similarity between modalities
+similarity_matrices = compute_cross_modal_similarity(
+    embeddings_dict=embeddings,       # Dictionary of embeddings per modality
+    verbose=True                      # Print statistics
+)
+# Returns: dict of similarity matrices
+```
+
+#### Comprehensive Analysis
+```python
+from multiomicsbind import create_analysis_report
+
+# Generate complete analysis report with one function
+report = create_analysis_report(
+    model=model,                      # Trained model
+    dataset=dataset,                  # Dataset
+    device=device,                    # Device
+    history=history,                  # Training history (optional)
+    output_dir='./results',           # Output directory
+    compute_importance=True,          # Compute feature importance
+    compute_similarity=True,          # Compute cross-modal similarity
+    verbose=True                      # Print progress
+)
+# Returns: comprehensive report dictionary
+# Creates: training plots, confusion matrix, UMAP, feature importance, similarity analysis
+```
+
+#### Visualization
+```python
+from multiomicsbind import (
+    plot_training_history_detailed,
+    plot_cross_modal_similarity_matrices,
+    plot_feature_importance_distribution
+)
+
+# Enhanced training history plot
+plot_training_history_detailed(history, save_path='training.png')
+
+# Cross-modal similarity heatmaps
+plot_cross_modal_similarity_matrices(similarity_matrices, save_path='similarity.png')
+
+# Feature importance distribution
+plot_feature_importance_distribution(importance_df, top_k=30, save_path='importance.png')
+```
+
+#### Utilities
+```python
+from multiomicsbind import fix_nan_values, check_nan_values
+
+# Check for NaN values in dataset
+nan_stats = check_nan_values(dataset, verbose=True)
+
+# Fix NaN values (replaces with mean/zero)
+dataset = fix_nan_values(dataset, modality='proteomics', verbose=True)
+```
+
+---
 
 ### Core Classes
 
