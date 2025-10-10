@@ -79,7 +79,11 @@ Multi-omics data integration is a critical challenge in systems biology and prec
 - 🔄 **Missing Data Robustness** when non-anchor modalities are absent
 - 🚀 **Emergent Cross-Modal Abilities** for zero-shot retrieval
 
-## � Installation
+---
+
+## 📦 Installation
+
+### Quick Install
 
 ```bash
 git clone https://github.com/shivaprasad-patil/MultiOmicsBind.git
@@ -87,11 +91,14 @@ cd MultiOmicsBind
 pip install -e .
 ```
 
-**Requirements:**
-- Python 3.8+
-- PyTorch 1.9+
-- NumPy, Pandas, scikit-learn
-- Optional: UMAP (for visualizations)
+### Requirements
+
+- **Python**: 3.8 or higher
+- **PyTorch**: 1.9 or higher
+- **Core Dependencies**: NumPy, Pandas, scikit-learn
+- **Optional**: UMAP-learn (for visualizations)
+
+---
 
 ## 🚀 Quick Start
 
