@@ -79,15 +79,21 @@ Multi-omics data integration is a critical challenge in systems biology and prec
 - 🔄 **Missing Data Robustness** when non-anchor modalities are absent
 - 🚀 **Emergent Cross-Modal Abilities** for zero-shot retrieval
 
-## 🚀 Quick Start
-
-### Installation
+## � Installation
 
 ```bash
 git clone https://github.com/shivaprasad-patil/MultiOmicsBind.git
 cd MultiOmicsBind
 pip install -e .
 ```
+
+**Requirements:**
+- Python 3.8+
+- PyTorch 1.9+
+- NumPy, Pandas, scikit-learn
+- Optional: UMAP (for visualizations)
+
+## 🚀 Quick Start
 
 ### ⚡ Simplified API (Recommended)
 
@@ -109,7 +115,8 @@ dataset = TemporalMultiOmicsDataset(
     temporal_data_paths={'proteomics': 'proteins_timeseries.csv'},
     temporal_metadata={'proteomics': {'timepoints': [0,1,2,4,8]}},
     metadata_path='metadata.csv',
-    label_col='response'
+    label_col='response',
+    normalize=True  # ⚠️ IMPORTANT: Normalizes data to mean=0, std=1
 )
 
 # Train model (one line!)
@@ -135,13 +142,17 @@ print(f"Results saved to: {report['output_dir']}")
 - ✅ **Cross-modal analysis** - Understand modality alignment
 - ✅ **Comprehensive reports** - Generate plots, CSVs, and statistics automatically
 
-### Basic Usage (Low-Level API)
+### 🔧 Low-Level API (Advanced Users)
+
+For users who need fine-grained control over the training process:
 
 ```python
 import torch
 from multiomicsbind import MultiOmicsBindWithHead, MultiOmicsDataset, train_multiomicsbind
 
-# 1. Define your multi-omics data (any number of modalities, any dimensions)
+# 1. Prepare your multi-omics data paths
+# Note: Each CSV must have a 'sample_id' column
+# All files must have samples in the same order!
 data_paths = {
     'transcriptomics': 'gene_expression.csv',     # 20K genes
     'proteomics': 'protein_levels.csv',           # 8K proteins  
@@ -150,20 +161,16 @@ data_paths = {
     'genomics': 'snp_data.csv'                    # 500K SNPs
 }
 
-# 2. Load data
+# 2. Load dataset
 dataset = MultiOmicsDataset(
     data_paths=data_paths,
     metadata_path='metadata.csv',
-    cat_cols=['drug', 'cell_line'],
-    num_cols=['dose', 'time'],
-    label_col='response'
+    cat_cols=['drug', 'cell_line'],  # Categorical features
+    num_cols=['dose', 'time'],       # Numerical features
+    label_col='response'              # Target label
 )
 
-# ⚠️ Important: All data files must have samples in the same order!
-# Each row in transcriptomics.csv must correspond to the same sample 
-# as the same row in proteomics.csv, metabolomics.csv, etc.
-
-# 3. Create model with binding modality (recommended for 4+ modalities)
+# 3. Initialize model
 input_dims = dataset.get_input_dims()
 cat_dims, num_dims = dataset.get_metadata_dims()
 
@@ -176,22 +183,32 @@ model = MultiOmicsBindWithHead(
     binding_modality='transcriptomics'  # Use transcriptomics as anchor
 )
 
-# 4. Train
+# 4. Setup training
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=True)
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
+# 5. Train model
 trained_model = train_multiomicsbind(
     model=model,
     dataloader=dataloader,
     optimizer=optimizer,
     device=device,
-    epochs=50
+    epochs=50,
+    use_classification=True
 )
 
-# 5. Extract unified embeddings
-embeddings = model.encode(sample_data)
+# 6. Extract embeddings
+model.eval()
+with torch.no_grad():
+    embeddings = model.encode(sample_data)
+    predictions = model(sample_data)
 ```
+
+**Key Points:**
+- ⚠️ **Data Format**: All CSV files must have a `sample_id` column
+- ⚠️ **Sample Order**: Rows must correspond across all modality files
+- ⚠️ **Normalization**: Set `normalize=True` in `MultiOmicsDataset()` (recommended)
 
 ## 🔗 Choosing Your Binding Modality
 
