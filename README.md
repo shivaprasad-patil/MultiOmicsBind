@@ -79,7 +79,208 @@ pip install -e .
 
 ---
 
-## 🚀 Quick Start
+## � Input Data Requirements
+
+### Data Format
+
+MultiOmicsBind expects your input data in **CSV format** with specific requirements:
+
+#### ✅ File Structure
+```
+your_data.csv:
+sample_id,feature_1,feature_2,...,feature_N
+sample_001,0.234,-1.456,...,0.891
+sample_002,1.123,-0.234,...,-0.567
+...
+```
+
+**Critical Requirements:**
+- ✅ Each CSV must have a `sample_id` column
+- ✅ All modality files must have samples in the **same order**
+- ✅ Feature columns should contain numerical values
+- ✅ Missing values (NaN) are supported and handled automatically
+
+### Data Normalization
+
+**Important**: MultiOmicsBind works best with **standardized data** (mean=0, std=1) for optimal neural network training.
+
+#### Decision Tree: Which Option Should You Use?
+
+```
+Is your data already normalized? 
+│
+├─ YES → What kind of normalization?
+│  │
+│  ├─ Z-score (mean=0, std=1) ────────────→ Use normalize=False ✅
+│  │
+│  └─ Other (quantile, TPM, TMM, etc.) ───→ Use normalize=True ⚠️
+│     (Apply z-score on top)
+│
+└─ NO (raw counts/intensities) ───────────→ Use normalize=True ✅
+```
+
+#### Option 1: Data Already Z-Score Normalized (mean=0, std=1)
+
+If your data is **already standardized** to mean=0, std=1:
+
+```python
+# ✅ Data already z-score normalized (mean=0, std=1)
+dataset = TemporalMultiOmicsDataset(
+    static_data_paths={'transcriptomics': 'genes_zscore.csv'},
+    temporal_data_paths={'proteomics': 'proteins_zscore.csv'},
+    metadata_path='metadata.csv',
+    normalize=False  # ⚠️ Set to False - already standardized!
+)
+```
+
+**When to use `normalize=False`:**
+- ✅ Data pre-processed with `sklearn.preprocessing.StandardScaler`
+- ✅ Data normalized to mean=0, std=1 using custom pipeline
+- ✅ Already applied z-score normalization per feature
+- ✅ Want full control over normalization process
+
+#### Option 2: Data Normalized But NOT to mean=0, std=1 (MOST COMMON)
+
+**Common Scenario**: Your data is already processed with biological normalization methods but needs z-score standardization:
+
+```python
+# ⚠️ Common case: TPM, FPKM, quantile normalized, TMM, DESeq2, etc.
+# These methods normalize data but NOT to mean=0, std=1
+# → Use normalize=True to apply z-score standardization on top
+
+dataset = TemporalMultiOmicsDataset(
+    static_data_paths={'transcriptomics': 'genes_tpm.csv'},      # TPM/FPKM normalized
+    temporal_data_paths={'proteomics': 'proteins_quantile.csv'}, # Quantile normalized
+    metadata_path='metadata.csv',
+    normalize=True  # ✅ Apply z-score standardization (mean=0, std=1)
+)
+```
+
+**Common biological normalization methods that still need `normalize=True`:**
+- 📊 **RNA-seq**: TPM, FPKM, RPKM, CPM, DESeq2, edgeR, TMM
+- 🧬 **Proteomics**: Quantile normalization, VSN, cyclic loess
+- 🔬 **Metabolomics**: Probabilistic quotient normalization (PQN)
+- 🖼️ **Cell Painting**: Robust MAD normalization, sphering
+- 📈 **General**: Log-transformation, median normalization, RLE
+
+**Why you still need z-score standardization:**
+```python
+# Example: TPM-normalized RNA-seq data
+import pandas as pd
+df = pd.read_csv('genes_tpm.csv')
+print(df.iloc[:, 1:].mean().mean())  # Mean ≈ 5000 (not 0!)
+print(df.iloc[:, 1:].std().mean())   # Std ≈ 8000 (not 1!)
+
+# Even though TPM-normalized, needs z-score for neural network
+dataset = TemporalMultiOmicsDataset(
+    static_data_paths={'transcriptomics': 'genes_tpm.csv'},
+    normalize=True  # ✅ Standardize to mean=0, std=1
+)
+```
+
+#### Option 3: Raw/Unnormalized Data
+
+If your data is **completely raw**:
+
+```python
+# ✅ Raw data - let MultiOmicsBind normalize it
+dataset = TemporalMultiOmicsDataset(
+    static_data_paths={'transcriptomics': 'genes_raw_counts.csv'},
+    temporal_data_paths={'proteomics': 'proteins_raw_intensity.csv'},
+    metadata_path='metadata.csv',
+    normalize=True  # ✅ Apply z-score standardization
+)
+```
+
+**When your data is raw:**
+- ✅ Raw read counts (RNA-seq)
+- ✅ Raw intensity values (mass spec, imaging)
+- ✅ Unnormalized measurements
+- ✅ Quick prototyping and testing
+
+### Data Normalization Best Practices
+
+```python
+# Example: Pre-normalize your data for production use
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+
+# Load raw data
+df = pd.read_csv('proteomics_raw.csv')
+sample_ids = df['sample_id']
+features = df.drop(columns=['sample_id'])
+
+# Normalize to mean=0, std=1
+scaler = StandardScaler()
+features_normalized = scaler.fit_transform(features)
+
+# Save normalized data
+df_normalized = pd.DataFrame(features_normalized, columns=features.columns)
+df_normalized.insert(0, 'sample_id', sample_ids)
+df_normalized.to_csv('proteomics_normalized.csv', index=False)
+
+# Use with normalize=False
+dataset = MultiOmicsDataset(
+    data_paths={'proteomics': 'proteomics_normalized.csv'},
+    normalize=False  # Already normalized!
+)
+```
+
+### Why Standardization (Z-Score) Matters
+
+1. **Scale Alignment**: Different omics have vastly different scales (genes: 0-10K, proteins: 0-1M)
+2. **Neural Network Training**: Prevents gradient instability and improves convergence
+3. **NaN Handling**: Allows replacing NaN with 0.0 (equivalent to mean after standardization)
+4. **Cross-Modal Comparison**: Ensures fair comparison between modalities in embedding space
+
+### Summary Table
+
+| Your Data State | Example Methods | normalize=True | normalize=False |
+|----------------|-----------------|----------------|-----------------|
+| **Raw counts/intensities** | Unprocessed RNA-seq counts, raw mass spec | ✅ **Use this** | ❌ Don't use |
+| **Biologically normalized (NOT z-score)** | TPM, FPKM, quantile, TMM, DESeq2, VSN | ✅ **Use this** ⭐ | ❌ Don't use |
+| **Already z-score standardized (mean=0, std=1)** | StandardScaler applied, custom z-score | ❌ Don't use | ✅ **Use this** |
+| **Log-transformed only** | log2(TPM+1), log10(intensity) | ✅ **Use this** | ❌ Don't use |
+| **Quick prototyping** | Any data, exploratory analysis | ✅ **Use this** | - |
+| **Production (pre-standardized)** | Controlled pipeline with saved scalers | - | ✅ **Use this** |
+
+⭐ **Most common scenario**: Biologically normalized data (TPM, quantile, TMM, etc.) → Use `normalize=True`
+
+### Real-World Examples
+
+```python
+# Example 1: TPM-normalized RNA-seq (MOST COMMON)
+dataset = TemporalMultiOmicsDataset(
+    static_data_paths={'transcriptomics': 'genes_tpm.csv'},
+    normalize=True  # ✅ TPM is not z-score, needs standardization
+)
+
+# Example 2: Quantile-normalized proteomics
+dataset = TemporalMultiOmicsDataset(
+    temporal_data_paths={'proteomics': 'proteins_quantile_normalized.csv'},
+    normalize=True  # ✅ Quantile normalization is not z-score
+)
+
+# Example 3: Pre-standardized production pipeline
+dataset = TemporalMultiOmicsDataset(
+    static_data_paths={'transcriptomics': 'genes_zscore.csv'},
+    normalize=False  # ✅ Already mean=0, std=1
+)
+
+# Example 4: Mixed - some standardized, some not
+dataset = TemporalMultiOmicsDataset(
+    static_data_paths={
+        'transcriptomics': 'genes_zscore.csv',    # Already standardized
+        'cell_painting': 'features_robust_mad.csv'  # MAD normalized, NOT z-score
+    },
+    normalize=True  # ⚠️ Will standardize ALL - be careful!
+    # Better: pre-standardize cell_painting externally, use normalize=False
+)
+```
+
+---
+
+## �🚀 Quick Start
 
 ### ⚡ Simplified API (Recommended)
 
