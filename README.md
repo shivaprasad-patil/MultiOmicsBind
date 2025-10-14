@@ -637,6 +637,92 @@ with torch.no_grad():
 - ⚠️ **Sample Order**: Rows must correspond across all modality files
 - ⚠️ **Normalization**: Set `normalize=True` in `MultiOmicsDataset()` (recommended)
 
+---
+
+## 📓 Complete Interactive Tutorial
+
+**NEW!** 🎉 We've created a comprehensive Jupyter notebook tutorial that walks through **all** MultiOmicsBind functionalities step-by-step!
+
+### 🎯 What's Included
+
+The **[MultiOmicsBind Complete Tutorial](examples/MultiOmicsBind_Complete_Tutorial.ipynb)** covers:
+
+- ✅ **Loading multi-omics data from CSV files**
+- ✅ **Creating temporal multi-omics datasets**
+- ✅ **Automatic NaN detection and fixing**
+- ✅ **Model training with binding modality**
+- ✅ **Test set evaluation (no data leakage!)**
+- ✅ **Feature importance analysis**
+- ✅ **Cross-modal similarity computation**
+- ✅ **UMAP visualizations with custom class names** (NEW!)
+- ✅ **Dose-response analysis visualization** (NEW!)
+- ✅ **Modality contribution analysis**
+
+### 🚀 Get Started
+
+```bash
+# Clone the repository
+git clone https://github.com/shivaprasad-patil/MultiOmicsBind.git
+cd MultiOmicsBind/examples
+
+# Launch Jupyter
+jupyter notebook MultiOmicsBind_Complete_Tutorial.ipynb
+```
+
+Or **[view it directly on GitHub](examples/MultiOmicsBind_Complete_Tutorial.ipynb)** 📖
+
+### 💡 Why Use the Tutorial?
+
+- **Interactive**: Run code cell-by-cell and see results immediately
+- **Comprehensive**: All features demonstrated with real examples
+- **Self-contained**: Generates synthetic data if needed
+- **Best practices**: Shows proper data handling and visualization
+- **Production-ready**: Code you can adapt for your own projects
+
+### 📚 Tutorial Highlights
+
+```python
+# Example: Complete workflow in the tutorial
+
+# 1. Load your CSV files
+transcriptomics_df = pd.read_csv('transcriptomics_baseline.csv')
+proteomics_df = pd.read_csv('proteomics_timeseries.csv')
+metadata_df = pd.read_csv('metadata.csv')
+
+# 2. Create dataset
+dataset = TemporalMultiOmicsDataset(
+    static_files={'transcriptomics': 'transcriptomics_baseline.csv'},
+    temporal_files={'proteomics': 'proteomics_timeseries.csv'},
+    metadata_file='metadata.csv',
+    label_col='response',
+    num_cols=['dose']  # Include dose for dose-response analysis!
+)
+
+# 3. Train model
+model, history = train_temporal_model(dataset, device, epochs=15)
+
+# 4. Generate comprehensive analysis with custom class names
+class_names = ['No Response', 'Partial Response', 'Full Response']
+report = create_analysis_report(
+    model, test_dataset, device,
+    class_names=class_names,  # UMAPs show these names!
+    output_dir='./analysis_results'
+)
+
+# 5. NEW! Dose-response visualization
+plot_dose_response_analysis(
+    doses=test_doses,
+    labels=test_labels,
+    predictions=test_predictions,
+    class_names=class_names,
+    save_path='dose_response.png'
+)
+```
+
+**All this and more in the tutorial!** 🎓
+
+---
+
 ## 🔗 Choosing Your Binding Modality
 
 ### Recommended Strategies
