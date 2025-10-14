@@ -365,10 +365,15 @@ def main():
     
     # Generate full analysis report on TEST SET (one line!)
     print("\n7. Creating comprehensive report with create_analysis_report()...")
+    
+    # Define class names for better visualization
+    class_names = ['No Response', 'Partial Response', 'Full Response']
+    
     report = create_analysis_report(
         model=model,
         dataset=test_dataset,  # <-- CHANGED: Use test_dataset only
         device=device,
+        class_names=class_names,  # ✅ Add custom class names
         output_dir='./temporal_analysis_results',
         compute_importance=True,
         compute_similarity=True,
@@ -380,12 +385,54 @@ def main():
     print("ANALYSIS COMPLETE!")
     print("=" * 60)
     
-    print("\nKey findings:")
-    print("- Successfully integrated static (transcriptomics, cell painting) and temporal (proteomics) data")
-    print("- LSTM encoder effectively captured temporal proteomics patterns")
-    print("- Binding modality approach maintained efficiency with mixed data types")
-    print(f"- Model achieved {report['accuracy']:.4f} accuracy on HELD-OUT test set")
-    print(f"- Training samples: {len(train_dataset)}, Test samples: {len(test_dataset)}")
+    # ============================================
+    # ANALYZE MODALITY CONTRIBUTIONS
+    # ============================================
+    print("\n" + "=" * 60)
+    print("MODALITY CONTRIBUTION ANALYSIS")
+    print("=" * 60)
+    
+    if 'importance_df' in report and report['importance_df'] is not None:
+        importance_df = report['importance_df']
+        
+        # Calculate contribution by modality
+        modality_contribution = importance_df.groupby('modality')['importance'].sum()
+        total_importance = modality_contribution.sum()
+        
+        print("\nModality Importance Contributions:")
+        for modality, importance in modality_contribution.items():
+            percentage = (importance / total_importance) * 100
+            print(f"  {modality}: {importance:.2f} ({percentage:.1f}%)")
+        
+        # Check if temporal data dominates
+        if 'proteomics' in modality_contribution.index:
+            proteomics_pct = (modality_contribution['proteomics'] / total_importance) * 100
+            print(f"\n{'✓' if proteomics_pct > 50 else '→'} Temporal proteomics contributes {proteomics_pct:.1f}% to predictions")
+            
+            if proteomics_pct > 60:
+                print("  → Temporal dynamics are highly informative for this task")
+            elif proteomics_pct < 40:
+                print("  → Baseline state (static modalities) more predictive than dynamics")
+            else:
+                print("  → Balanced contribution from temporal and static modalities")
+    
+    print("\n" + "=" * 60)
+    print("KEY FINDINGS")
+    print("=" * 60)
+    
+    print("\nModel Performance:")
+    print(f"  - Test Set Accuracy: {report['accuracy']:.4f}")
+    print(f"  - Training samples: {len(train_dataset)}, Test samples: {len(test_dataset)}")
+    
+    print("\nData Integration:")
+    print("  - Successfully integrated static (transcriptomics, cell painting) and temporal (proteomics) data")
+    print("  - LSTM encoder effectively captured temporal proteomics patterns")
+    print("  - Binding modality approach maintained efficiency with mixed data types")
+    
+    print("\nData Handling:")
+    print("  - NaN values automatically detected and fixed before training")
+    print("  - Proper train/test split prevents data leakage")
+    print("  - Dose information treated as numerical metadata (continuous dose-response learning)")
     
     print("\nGenerated files:")
     print("- temporal_multiomicsbind.pth (trained model)")
