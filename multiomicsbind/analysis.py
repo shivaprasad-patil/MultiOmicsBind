@@ -208,6 +208,7 @@ def create_analysis_report(
         try:
             umap_path = output_path / f'embeddings_umap_{modality}.png'
             plot_embeddings_umap(emb, labels, title=f'{modality.capitalize()} Embeddings',
+                               class_names=class_names,  # ✅ Pass class names
                                save_path=str(umap_path))
             if verbose:
                 print(f"  ✓ UMAP plot saved for {modality}")

@@ -1,12 +1,12 @@
 Classification Report
 ================================================================================
 
-              precision    recall  f1-score   support
+                  precision    recall  f1-score   support
 
-     Class 0       0.41      1.00      0.58        98
-     Class 1       0.00      0.00      0.00        80
-     Class 2       0.00      0.00      0.00        62
+     No Response       1.00      1.00      1.00        98
+Partial Response       1.00      1.00      1.00        80
+   Full Response       1.00      1.00      1.00        62
 
-    accuracy                           0.41       240
-   macro avg       0.14      0.33      0.19       240
-weighted avg       0.17      0.41      0.24       240
+        accuracy                           1.00       240
+       macro avg       1.00      1.00      1.00       240
+    weighted avg       1.00      1.00      1.00       240

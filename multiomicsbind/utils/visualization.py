@@ -1063,3 +1063,105 @@ def plot_feature_importance_distribution(
         print(f"Feature importance distribution saved to {save_path}")
     else:
         plt.show()
+
+
+def plot_dose_response_analysis(
+    doses: np.ndarray,
+    labels: np.ndarray,
+    predictions: np.ndarray,
+    class_names: Optional[List[str]] = None,
+    save_path: Optional[str] = None,
+    figsize: Tuple[int, int] = (16, 6)
+) -> None:
+    """
+    Plot dose-response analysis showing how dose correlates with predictions.
+    
+    Args:
+        doses (np.ndarray): Dose values for each sample
+        labels (np.ndarray): True labels
+        predictions (np.ndarray): Predicted labels
+        class_names (Optional[List[str]]): Names for each class
+        save_path (Optional[str]): Path to save the figure
+        figsize (Tuple[int, int]): Figure size
+    """
+    if class_names is None:
+        unique_labels = np.unique(labels)
+        class_names = [f'Class {i}' for i in range(len(unique_labels))]
+    
+    # Create figure with 3 subplots
+    fig, axes = plt.subplots(1, 3, figsize=figsize)
+    
+    # Define colors for each class
+    unique_labels = np.unique(labels)
+    colors = plt.cm.viridis(np.linspace(0, 1, len(unique_labels)))
+    
+    # Plot 1: Dose distribution by true class (violin plot)
+    ax1 = axes[0]
+    dose_by_class = [doses[labels == label] for label in unique_labels]
+    parts = ax1.violinplot(dose_by_class, positions=range(len(unique_labels)), 
+                           showmeans=True, showmedians=True)
+    
+    # Color the violin plots
+    for i, pc in enumerate(parts['bodies']):
+        pc.set_facecolor(colors[i])
+        pc.set_alpha(0.7)
+    
+    ax1.set_xticks(range(len(unique_labels)))
+    ax1.set_xticklabels([class_names[i] for i in unique_labels], rotation=15, ha='right')
+    ax1.set_ylabel('Dose (μM)', fontsize=11)
+    ax1.set_title('Dose Distribution by True Class', fontsize=12, fontweight='bold')
+    ax1.grid(True, alpha=0.3, axis='y')
+    
+    # Plot 2: Dose vs Prediction accuracy
+    ax2 = axes[1]
+    correct = (predictions == labels)
+    
+    # Scatter plot with correct/incorrect predictions
+    ax2.scatter(doses[correct], predictions[correct], 
+               c=[colors[int(p)] for p in predictions[correct]], 
+               alpha=0.6, s=50, label='Correct', marker='o', edgecolors='black', linewidths=0.5)
+    ax2.scatter(doses[~correct], predictions[~correct], 
+               c='red', alpha=0.8, s=50, label='Incorrect', marker='x', linewidths=2)
+    
+    ax2.set_xlabel('Dose (μM)', fontsize=11)
+    ax2.set_ylabel('Predicted Class', fontsize=11)
+    ax2.set_yticks(range(len(unique_labels)))
+    ax2.set_yticklabels([class_names[i] for i in unique_labels])
+    ax2.set_title('Dose vs Predictions', fontsize=12, fontweight='bold')
+    ax2.legend(loc='best')
+    ax2.grid(True, alpha=0.3)
+    
+    # Plot 3: Mean dose per class with error bars
+    ax3 = axes[2]
+    
+    # Calculate statistics for both true and predicted
+    x_pos = np.arange(len(unique_labels))
+    width = 0.35
+    
+    true_means = [doses[labels == label].mean() for label in unique_labels]
+    true_stds = [doses[labels == label].std() for label in unique_labels]
+    pred_means = [doses[predictions == label].mean() if (predictions == label).any() else 0 
+                  for label in unique_labels]
+    pred_stds = [doses[predictions == label].std() if (predictions == label).any() else 0 
+                 for label in unique_labels]
+    
+    bars1 = ax3.bar(x_pos - width/2, true_means, width, yerr=true_stds, 
+                   label='True Class', alpha=0.8, capsize=5, color='steelblue')
+    bars2 = ax3.bar(x_pos + width/2, pred_means, width, yerr=pred_stds, 
+                   label='Predicted Class', alpha=0.8, capsize=5, color='coral')
+    
+    ax3.set_xticks(x_pos)
+    ax3.set_xticklabels([class_names[i] for i in unique_labels], rotation=15, ha='right')
+    ax3.set_ylabel('Mean Dose (μM)', fontsize=11)
+    ax3.set_title('Mean Dose per Class (± SD)', fontsize=12, fontweight='bold')
+    ax3.legend(loc='best')
+    ax3.grid(True, alpha=0.3, axis='y')
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Dose-response analysis plot saved to {save_path}")
+    else:
+        plt.show()
+
