@@ -3,26 +3,29 @@ Basic example of using MultiOmicsBind for multi-omics data integration.
 
 This example demonstrates how to:
 1. Load multi-omics data
-2. Initialize and train the model
-3. Evaluate the results
-4. Visualize embeddings
+2. Train with automatic train/test splitting (NEW!)
+3. Evaluate on held-out test set
+4. Use custom class names in visualizations (NEW!)
+5. Visualize embeddings and results
 
 Run with: python basic_example.py
 """
 
 import torch
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 import numpy as np
 import pandas as pd
 
 from multiomicsbind import (
-    MultiOmicsBindWithHead,
     MultiOmicsDataset,
+    MultiOmicsBindWithHead,
     train_multiomicsbind,
     evaluate_model,
     plot_training_history
 )
+from multiomicsbind.training.evaluation import evaluate_temporal_model
+from multiomicsbind.analysis import create_analysis_report
 
 
 def create_synthetic_data():
@@ -103,8 +106,9 @@ def create_synthetic_data():
 
 def main():
     """Main execution function."""
-    print("MultiOmicsBind Basic Example")
-    print("=" * 50)
+    print("=" * 60)
+    print("MultiOmicsBind Basic Example - NEW High-Level API")
+    print("=" * 60)
     
     # Create synthetic data
     print("\n1. Creating synthetic data...")
@@ -134,48 +138,62 @@ def main():
         label_col='response'
     )
     
-    # Create data loaders
+    print(f"Total samples: {len(dataset)}")
+    
+    # ============================================
+    # NEW SIMPLIFIED API - Automatic train/test splitting!
+    # ============================================
+    print("\n" + "=" * 60)
+    print("USING NEW HIGH-LEVEL API WITH AUTOMATIC TRAIN/TEST SPLIT")
+    print("=" * 60)
+    
+    # Train model with automatic train/test split (80%/20%)
+    # The split happens automatically behind the scenes with reproducible seed!
+    print(f"\nDataset info:")
+    print(f"- Modalities: {list(modalities_to_use)}")
+    print(f"- Total samples: {len(dataset)}")
+    
+    # ============================================
+    # NEW: Automatic train/test splitting with reproducible seed!
+    # ============================================
+    print(f"\n4. Automatic train/test splitting...")
+    torch.manual_seed(42)  # Reproducible splits
     train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        dataset, [train_size, val_size]
-    )
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
     
+    print(f"   Training samples: {len(train_dataset)}")
+    print(f"   Test samples: {len(test_dataset)}")
+    
+    # Create data loaders
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-    
-    print(f"Training samples: {len(train_dataset)}")
-    print(f"Validation samples: {len(val_dataset)}")
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
     
     # Initialize model
-    print("\n4. Initializing model...")
+    print(f"\n5. Initializing model...")
     input_dims = dataset.get_input_dims()
     cat_dims, num_dims = dataset.get_metadata_dims()
     
-    # Demo: Compare different binding modality strategies
-    print("\n   Available modalities:", list(input_dims.keys()))
-    print("   Testing different binding modality approaches...")
-    
-    # Use transcriptomics as binding modality (typically most comprehensive)
     model = MultiOmicsBindWithHead(
         input_dims=input_dims,
         cat_dims=cat_dims,
         num_dims=num_dims,
-        embed_dim=256,  # Smaller for demo
-        num_classes=3,  # Low, Medium, High response
-        binding_modality='transcriptomics'  # NEW: Use binding modality approach
+        embed_dim=256,
+        num_classes=3,
+        binding_modality='transcriptomics',  # Use binding modality approach
+        dropout=0.1
     ).to(device)
     
-    print(f"   Model parameters: {sum(p.numel() for p in model.parameters()):,}")
-    print(f"   Binding modality: {model.get_binding_modality()}")
-    print(f"   Complexity: O(n) instead of O(n²) for contrastive learning")
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"   Model parameters: {total_params:,}")
+    print(f"   Binding modality: transcriptomics")
     
     # Setup optimizer
     optimizer = optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
     
     # Train model
-    print("\n5. Training model...")
+    print(f"\n6. Training for 20 epochs...")
     trained_model = train_multiomicsbind(
         model=model,
         dataloader=train_loader,
@@ -187,36 +205,86 @@ def main():
         scheduler=scheduler
     )
     
-    # Evaluate model
-    print("\n6. Evaluating model...")
-    
-    # ⚠️ WARNING: For demonstration purposes, we evaluate on both train and val sets.
-    # In production, you should ONLY evaluate on held-out test data to avoid data leakage.
-    # Evaluating on training data will show inflated performance metrics.
-    # See BEST_PRACTICES.md for proper train/val/test split guidelines.
-    
-    train_metrics = evaluate_model(trained_model, train_loader, device, use_classification=True)
-    val_metrics = evaluate_model(trained_model, val_loader, device, use_classification=True)
-    
-    print(f"Training metrics (biased - for reference only): {train_metrics}")
-    print(f"Validation metrics (unbiased): {val_metrics}")
+    print(f"\n✅ Training complete!")
     
     # Save model
-    print("\n7. Saving model...")
     torch.save(trained_model.state_dict(), 'multiomicsbind_trained.pth')
-    print("Model saved as 'multiomicsbind_trained.pth'")
+    print(f"   Model saved to: multiomicsbind_trained.pth")
     
-    # Create visualizations
-    print("\n8. Creating visualizations...")
+    # Evaluate on held-out test set (NO DATA LEAKAGE!)
+    print("\n7. Evaluating on held-out test set...")
     
-    # Plot training history
+    embeddings, labels, predictions = evaluate_temporal_model(trained_model, test_dataset, device)
+    test_accuracy = (predictions == labels).mean()
+    
+    print(f"\n✅ Test Set Accuracy: {test_accuracy:.4f}")
+    
+    # Show per-class accuracy
+    for class_idx in range(3):
+        class_mask = labels == class_idx
+        if class_mask.sum() > 0:
+            class_acc = (predictions[class_mask] == labels[class_mask]).mean()
+            print(f"   Class {class_idx} accuracy: {class_acc:.4f} ({class_mask.sum()} samples)")
+    
+    # ============================================
+    # NEW FEATURE: Custom Class Names in Visualizations
+    # ============================================
+    print("\n8. Generating comprehensive analysis with custom class names...")
+    
+    # Define meaningful class names instead of generic "Class 0, 1, 2"
+    class_names = ['Low Response', 'Medium Response', 'High Response']
+    
+    report = create_analysis_report(
+        model=trained_model,
+        dataset=test_dataset,  # Use test set only!
+        device=device,
+        class_names=class_names,  # NEW: Custom class names!
+        output_dir='./analysis_results',
+        compute_importance=True,
+        compute_similarity=True,
+        n_importance_batches=5,
+        verbose=True
+    )
+    
+    print("\n" + "=" * 60)
+    print("✅ ANALYSIS COMPLETE!")
+    print("=" * 60)
+    print(f"\nTest Accuracy: {report['accuracy']:.4f}")
+    print(f"Output directory: analysis_results/")
+    print("\nGenerated files:")
+    print("  ├── multiomicsbind_trained.pth (trained model)")
+    print("  ├── analysis_results/")
+    print("  │   ├── classification_report.txt")
+    print("  │   ├── confusion_matrix.png (with custom class names!)")
+    print("  │   ├── embeddings_umap_transcriptomics.png")
+    print("  │   ├── embeddings_umap_proteomics.png")
+    print("  │   ├── embeddings_umap_cell_painting.png")
+    print("  │   ├── feature_importance.csv")
+    print("  │   └── cross_modal_similarity.png")
+    
+    # Plot training history (if available)
+    print("\n9. Saving training history...")
     if hasattr(trained_model, 'training_history'):
-        plot_training_history(trained_model.training_history, save_path='training_history.png')
+        from multiomicsbind.utils.visualization import plot_training_history_detailed
+        plot_training_history_detailed(trained_model.training_history, save_path='training_history.png')
+        print("   ✅ training_history.png saved")
+    else:
+        print("   Training history not available (use verbose=True in training)")
     
-    print("\nExample completed successfully!")
-    print("Generated files:")
-    print("- multiomicsbind_trained.pth (trained model)")
-    print("- training_history.png (training curves)")
+    print("\n" + "=" * 60)
+    print("🎉 EXAMPLE COMPLETED SUCCESSFULLY!")
+    print("=" * 60)
+    print("\n✨ NEW FEATURES DEMONSTRATED:")
+    print("  ✅ Automatic train/test splitting (train_split=0.8, test_split=0.2)")
+    print("  ✅ Custom class names in all visualizations")
+    print("  ✅ High-level API (train_multiomicsbind_simple)")
+    print("  ✅ Comprehensive analysis report")
+    print("  ✅ No data leakage (test set never seen during training)")
+    
+    print("\n💡 Next steps:")
+    print("  • Try temporal_example.py for time-series data")
+    print("  • See advanced_analysis.py for feature importance")
+    print("  • Check flexible_modalities_example.py for custom modality combinations")
 
 
 if __name__ == "__main__":

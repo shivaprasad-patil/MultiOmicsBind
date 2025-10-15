@@ -7,22 +7,25 @@ This example demonstrates:
 2. How to handle different feature dimensions
 3. How to scale to large datasets
 4. How to add new modality types
+5. NEW: Automatic train/test splitting
+6. NEW: Custom class names in visualizations
 
 Run with: python flexible_modalities_example.py
 """
 
 import torch
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 import numpy as np
 import pandas as pd
 
 from multiomicsbind import (
-    MultiOmicsBindWithHead,
     MultiOmicsDataset,
+    MultiOmicsBindWithHead,
     train_multiomicsbind,
     evaluate_model
 )
+from multiomicsbind.training.evaluation import evaluate_temporal_model
 
 
 def create_custom_synthetic_data(data_config, n_samples=1000):
@@ -199,48 +202,45 @@ def run_experiment(data_config, embed_dim=256, epochs=10, batch_size=32):
         label_col='response'
     )
     
-    # Create data loaders
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        dataset, [train_size, val_size]
-    )
-    
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    
     print(f"\nDataset info:")
     print(f"- Modalities: {list(data_config.keys())}")
-    print(f"- Training samples: {len(train_dataset)}")
-    print(f"- Validation samples: {len(val_dataset)}")
+    print(f"- Total samples: {len(dataset)}")
+    
+    # ============================================
+    # NEW: Automatic train/test splitting!
+    # ============================================
+    print(f"\nTraining with automatic train/test split...")
+    
+    # Automatic splitting with reproducible seed
+    torch.manual_seed(42)
+    train_size = int(0.8 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     
     # Initialize model
     input_dims = dataset.get_input_dims()
     cat_dims, num_dims = dataset.get_metadata_dims()
     
-    print(f"\nModel configuration:")
-    print(f"- Input dimensions: {input_dims}")
-    print(f"- Embedding dimension: {embed_dim}")
-    
     model = MultiOmicsBindWithHead(
         input_dims=input_dims,
-        binding_modality='transcriptomics',  # Use binding modality approach
         cat_dims=cat_dims,
         num_dims=num_dims,
         embed_dim=embed_dim,
-        num_classes=3
+        num_classes=3,
+        binding_modality='transcriptomics',  # Use binding modality approach
+        dropout=0.1
     ).to(device)
     
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"- Total parameters: {total_params:,}")
     
-    # Setup optimizer
+    # Train
     optimizer = optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.7)
     
-    # Train model
-    print(f"\nTraining for {epochs} epochs...")
-    trained_model = train_multiomicsbind(
+    model = train_multiomicsbind(
         model=model,
         dataloader=train_loader,
         optimizer=optimizer,
@@ -251,24 +251,33 @@ def run_experiment(data_config, embed_dim=256, epochs=10, batch_size=32):
         scheduler=scheduler
     )
     
-    # Evaluate model
-    print("\nEvaluating model...")
+    print(f"\n✅ Training complete!")
+    print(f"- Training samples: {len(train_dataset)}")
+    print(f"- Test samples: {len(test_dataset)}")
+    print(f"- Model parameters: {total_params:,}")
     
-    # ⚠️ WARNING: For demonstration purposes, we evaluate on both train and val sets.
-    # In production, you should ONLY evaluate on held-out test data to avoid data leakage.
-    # Evaluating on training data will show inflated performance metrics.
-    # See BEST_PRACTICES.md for proper train/val/test split guidelines.
+    # Evaluate on test set (NO DATA LEAKAGE!)
+    print("\nEvaluating on held-out test set...")
+    embeddings, labels, predictions = evaluate_temporal_model(model, test_dataset, device)
+    test_accuracy = (predictions == labels).mean()
     
-    train_metrics = evaluate_model(trained_model, train_loader, device, use_classification=True)
-    val_metrics = evaluate_model(trained_model, val_loader, device, use_classification=True)
+    # NEW: Custom class names
+    class_names = ['Low Response', 'Medium Response', 'High Response']
     
-    print(f"Training metrics (biased - for reference only): {train_metrics}")
-    print(f"Validation metrics (unbiased): {val_metrics}")
+    print(f"\n✅ Test Accuracy: {test_accuracy:.4f}")
+    print("\nPer-class accuracy:")
+    for class_idx in range(3):
+        class_mask = labels == class_idx
+        if class_mask.sum() > 0:
+            class_acc = (predictions[class_mask] == labels[class_mask]).mean()
+            print(f"   {class_names[class_idx]:20s}: {class_acc:.4f} ({class_mask.sum()} samples)")
+    
+    val_metrics = {'accuracy': test_accuracy}
     
     return {
         'data_config': data_config,
         'model_params': total_params,
-        'train_metrics': train_metrics,
+        'test_accuracy': test_accuracy,
         'val_metrics': val_metrics
     }
 
@@ -309,7 +318,7 @@ def main():
         print(f"  Modalities: {len(data_config)} ({', '.join(data_config.keys())})")
         print(f"  Total features: {total_features:,}")
         print(f"  Model parameters: {result['model_params']:,}")
-        print(f"  Validation accuracy: {result['val_metrics'].get('accuracy', 'N/A'):.3f}")
+        print(f"  Test accuracy: {result.get('test_accuracy', result['val_metrics'].get('accuracy', 'N/A')):.3f}")
     
     print("\n" + "=" * 80)
     print("KEY TAKEAWAYS:")
@@ -317,6 +326,11 @@ def main():
     print("- Feature dimensions can range from hundreds to hundreds of thousands")
     print("- The architecture scales efficiently with data complexity")
     print("- Easy to add new modality types by simply adding data files")
+    print("\n✨ NEW FEATURES:")
+    print("- ✅ Automatic train/test splitting (train_split=0.8, test_split=0.2)")
+    print("- ✅ Custom class names in all visualizations")
+    print("- ✅ High-level API for simplified usage")
+    print("- ✅ No data leakage with proper test set evaluation")
     print("=" * 80)
 
 

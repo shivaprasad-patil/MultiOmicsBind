@@ -278,57 +278,39 @@ def main():
     print("\n✓ Dataset is now clean and ready for training!")
     
     # ============================================
-    # SPLIT DATA INTO TRAIN AND TEST SETS
+    # NEW SIMPLIFIED API - Training in one line with automatic splitting!
     # ============================================
     print("\n" + "=" * 60)
-    print("CREATING TRAIN/TEST SPLIT")
+    print("USING NEW HIGH-LEVEL API WITH AUTOMATIC TRAIN/TEST SPLIT")
     print("=" * 60)
     
-    from torch.utils.data import random_split
-    
-    # Create proper train/test split (70% train, 30% test)
-    train_size = int(0.7 * len(dataset))
-    test_size = len(dataset) - train_size
-    
-    # Set seed for reproducibility
-    torch.manual_seed(42)
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-    
-    print(f"\n✓ Dataset split:")
-    print(f"  - Training samples: {len(train_dataset)} ({100*train_size/len(dataset):.0f}%)")
-    print(f"  - Test samples: {len(test_dataset)} ({100*test_size/len(dataset):.0f}%)")
-    
-    # ============================================
-    # NEW SIMPLIFIED API - Training in one line!
-    # ============================================
-    print("\n" + "=" * 60)
-    print("USING NEW HIGH-LEVEL API FUNCTIONS")
-    print("=" * 60)
-    
-    # Train model (one line!) - NOW USING TRAIN DATASET ONLY
+    # Train model with automatic train/test split (70%/30%)
+    # The split happens automatically behind the scenes with reproducible seed!
     print("\n1. Training model with train_temporal_model()...")
-    model, history = train_temporal_model(
-        dataset=train_dataset,  # <-- CHANGED: Use train_dataset only
+    model, history, train_dataset, test_dataset = train_temporal_model(
+        dataset=dataset,  # Pass full dataset - splitting handled automatically
         device=device,
+        train_split=0.7,  # 70% for training
+        test_split=0.3,   # 30% for testing
         binding_modality='transcriptomics',
         embed_dim=256,
         epochs=15,
         batch_size=32,
         lr=5e-4,  # Lower learning rate to avoid NaN
         dropout=0.2,
-        val_split=0.0,  # No additional split - we already have test_dataset
         verbose=True
     )
     
     # Save model
     torch.save(model.state_dict(), 'temporal_multiomicsbind.pth')
     print("\n✓ Model saved as 'temporal_multiomicsbind.pth'")
+    print(f"✓ Training samples: {len(train_dataset)}, Test samples: {len(test_dataset)}")
     
-    # Evaluate model (one line!) - NOW USING TEST DATASET ONLY
+    # Evaluate model (one line!) - NOW USING TEST DATASET FROM AUTOMATIC SPLIT
     print("\n2. Evaluating model on HELD-OUT TEST SET with evaluate_temporal_model()...")
     embeddings, labels, predictions = evaluate_temporal_model(
         model=model,
-        dataset=test_dataset,  # <-- CHANGED: Use test_dataset only
+        dataset=test_dataset,  # Test set from automatic split
         device=device,
         batch_size=64
     )

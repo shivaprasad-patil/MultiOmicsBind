@@ -299,49 +299,118 @@ def train_temporal_model(
     temporal_encoder_kwargs: Optional[Dict[str, Any]] = None,
     contrastive_weight: float = 0.1,
     val_split: float = 0.2,
-    verbose: bool = True
+    train_split: Optional[float] = None,
+    test_split: Optional[float] = None,
+    save_path: Optional[str] = None,
+    verbose: bool = True,
+    n_classes: Optional[int] = None,
+    hidden_dim: Optional[int] = None,
+    n_heads: Optional[int] = None,
+    n_layers: Optional[int] = None,
+    learning_rate: Optional[float] = None
 ):
     """
     Train a temporal multi-omics model with standard configuration.
     
     This function provides a high-level interface for training temporal multi-omics
-    models with minimal boilerplate code. It handles model initialization, data
-    splitting, training loop, and history tracking.
+    models with minimal boilerplate code. It handles model initialization, automatic
+    train/test splitting, training loop, and history tracking.
     
     Args:
-        dataset: TemporalMultiOmicsDataset instance
+        dataset: TemporalMultiOmicsDataset instance (or Subset for external split)
         device: torch device ('cuda' or 'cpu')
         epochs (int): Number of training epochs (default: 20)
         batch_size (int): Batch size for training (default: 32)
-        lr (float): Learning rate (default: 1e-4)
+        lr (float): Learning rate (default: 1e-4, overrides learning_rate)
         binding_modality (str): Modality to use for binding/alignment (default: 'transcriptomics')
         embed_dim (int): Embedding dimension (default: 256)
         dropout (float): Dropout rate (default: 0.2)
         temporal_encoder_kwargs (Optional[Dict]): Dict of temporal encoder configurations
         contrastive_weight (float): Weight for contrastive loss (default: 0.1)
-        val_split (float): Validation split ratio (default: 0.2)
+        val_split (float): Validation split ratio from training data (default: 0.2)
+        train_split (Optional[float]): Train/test split ratio (e.g., 0.8 for 80% train, 20% test).
+                                       If specified, automatically splits dataset. Use with test_split.
+        test_split (Optional[float]): Complementary to train_split (e.g., 0.2 for 20% test).
+                                      Both train_split and test_split must sum to 1.0.
+        save_path (Optional[str]): Path to save trained model (default: None, no saving)
         verbose (bool): Whether to print training progress (default: True)
+        n_classes (Optional[int]): Number of classes (inferred if None)
+        hidden_dim (Optional[int]): Hidden dimension (uses embed_dim if None)
+        n_heads (Optional[int]): Number of attention heads (default: 4)
+        n_layers (Optional[int]): Number of transformer layers (default: 2)
+        learning_rate (Optional[float]): Alternative parameter name for lr
     
     Returns:
-        model: Trained TemporalMultiOmicsBind model
+        If train_split/test_split specified:
+            (model, history, train_dataset, test_dataset): Trained model, history, and dataset splits
+        Otherwise:
+            (model, history): Trained model and training history
+            
         history: Dictionary containing training history with keys:
             - 'train_loss': List of training losses per epoch
-            - 'val_loss': List of validation losses per epoch
+            - 'val_loss': List of validation losses per epoch (if val_split > 0)
             - 'train_acc': List of training accuracies per epoch
-            - 'val_acc': List of validation accuracies per epoch
+            - 'val_acc': List of validation accuracies per epoch (if val_split > 0)
     
-    Example:
-        >>> from multiomicsbind import TemporalMultiOmicsDataset, train_temporal_model
-        >>> dataset = TemporalMultiOmicsDataset(...)
-        >>> device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        >>> model, history = train_temporal_model(dataset, device, epochs=15)
-        >>> print(f"Final validation accuracy: {history['val_acc'][-1]:.4f}")
+    Examples:
+        Basic usage with automatic 80/20 train/test split:
+        >>> model, history, train_set, test_set = train_temporal_model(
+        ...     dataset, device, epochs=15, train_split=0.8, test_split=0.2
+        ... )
+        
+        Manual split (traditional approach):
+        >>> from torch.utils.data import random_split
+        >>> train_dataset, test_dataset = random_split(dataset, [0.7, 0.3])
+        >>> model, history = train_temporal_model(train_dataset, device, epochs=15)
+        
+        No split (use full dataset):
+        >>> model, history = train_temporal_model(dataset, device, epochs=15, val_split=0.0)
     """
+    # Handle backwards compatibility for learning_rate parameter
+    if learning_rate is not None and lr == 1e-4:  # lr is at default
+        lr = learning_rate
+    # Handle backwards compatibility for learning_rate parameter
+    if learning_rate is not None and lr == 1e-4:  # lr is at default
+        lr = learning_rate
+    
     from torch.utils.data import random_split
     from ..core.model import TemporalMultiOmicsBind
     
     if temporal_encoder_kwargs is None:
         temporal_encoder_kwargs = {}
+    
+    # Handle automatic train/test splitting
+    original_dataset = dataset
+    test_dataset = None
+    return_test_set = False
+    
+    if train_split is not None or test_split is not None:
+        # Validate split parameters
+        if train_split is None or test_split is None:
+            raise ValueError("Both train_split and test_split must be specified together")
+        if abs(train_split + test_split - 1.0) > 1e-6:
+            raise ValueError(f"train_split ({train_split}) + test_split ({test_split}) must equal 1.0")
+        if train_split <= 0 or train_split >= 1:
+            raise ValueError(f"train_split must be between 0 and 1, got {train_split}")
+        
+        # Perform train/test split
+        train_size = int(train_split * len(dataset))
+        test_size = len(dataset) - train_size
+        dataset, test_dataset = random_split(
+            dataset,
+            [train_size, test_size],
+            generator=torch.Generator().manual_seed(42)
+        )
+        return_test_set = True
+        
+        if verbose:
+            print(f"=" * 60)
+            print("AUTOMATIC TRAIN/TEST SPLIT")
+            print(f"=" * 60)
+            print(f"✅ Dataset split:")
+            print(f"   Training samples: {train_size} ({train_split*100:.1f}%)")
+            print(f"   Test samples: {test_size} ({test_split*100:.1f}%)")
+            print()
     
     # Handle both raw datasets and Subset objects from random_split
     # If dataset is a Subset, get the original dataset
@@ -481,4 +550,14 @@ def train_temporal_model(
                       f"Train Loss: {history['train_loss'][-1]:.4f}, "
                       f"Train Acc: {history['train_acc'][-1]:.4f}")
     
-    return model, history
+    # Save model if path provided
+    if save_path:
+        torch.save(model.state_dict(), save_path)
+        if verbose:
+            print(f"\n✓ Model saved as '{save_path}'")
+    
+    # Return based on whether we did train/test split
+    if return_test_set:
+        return model, history, dataset, test_dataset
+    else:
+        return model, history
