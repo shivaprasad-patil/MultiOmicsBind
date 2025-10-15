@@ -1342,14 +1342,6 @@ embeddings, labels, preds = evaluate_temporal_model(model, test_dataset, ...)  #
 4. **Create realistic synthetic data** with appropriate noise and signal strength
 5. **Report multiple metrics** (precision, recall, F1) not just accuracy
 
-📖 **Full Guide**: See [BEST_PRACTICES.md](BEST_PRACTICES.md) for comprehensive guidelines on:
-- Train/validation/test splits
-- Avoiding data leakage
-- Creating realistic synthetic data
-- Model evaluation best practices
-- Hyperparameter tuning
-- Feature importance analysis
-
 ## 📄 License
 
 Apache License 2.0 - see [LICENSE](LICENSE) for details.
