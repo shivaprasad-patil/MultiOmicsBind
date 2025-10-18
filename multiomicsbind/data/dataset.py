@@ -147,6 +147,23 @@ class MultiOmicsDataset(Dataset):
             except Exception as e:
                 warnings.warn(f"Failed to load metadata from {self.metadata_path}: {e}")
 
+    def _is_binary_data(self, data: np.ndarray) -> bool:
+        """
+        Detect if data is binary (only contains 0 and 1 values).
+        
+        Args:
+            data: Numpy array to check
+            
+        Returns:
+            True if data is binary, False otherwise
+        """
+        # Get unique values, excluding NaN
+        unique_values = np.unique(data[~np.isnan(data)])
+        
+        # Check if all unique values are in {0, 1}
+        # Handle both integer and float representations
+        return len(unique_values) > 0 and set(unique_values).issubset({0, 0.0, 1, 1.0})
+    
     def _align_samples(self):
         """Align samples across all modalities and metadata."""
         # Find common sample IDs
@@ -170,8 +187,13 @@ class MultiOmicsDataset(Dataset):
             
             # Normalize if requested
             if self.normalize:
-                # Standardize features (z-score normalization)
-                data = (data - np.mean(data, axis=0)) / (np.std(data, axis=0) + 1e-8)
+                # Check if data is binary (e.g., mutation data with 0/1 values)
+                if self._is_binary_data(data):
+                    print(f"  {modality}: Binary data detected - skipping normalization")
+                else:
+                    # Standardize features (z-score normalization)
+                    data = (data - np.mean(data, axis=0)) / (np.std(data, axis=0) + 1e-8)
+                    print(f"  {modality}: Normalized ({data.shape[1]} features)")
             
             self.omics_data[modality] = data
         
