@@ -92,6 +92,11 @@ def compute_feature_importance(
     which features consistently contribute to model predictions. Returns both
     raw importance scores per modality and a comprehensive DataFrame for analysis.
     
+    Importance scores are normalized to [0, 1] range for each modality, where:
+    - 1.0 indicates the most important feature within that modality
+    - 0.0 indicates the least important feature within that modality
+    - This normalization makes scores interpretable and comparable across runs
+    
     Args:
         model: Trained model
         dataset: Dataset instance (TemporalMultiOmicsDataset or MultiOmicsDataset)
@@ -102,12 +107,13 @@ def compute_feature_importance(
     
     Returns:
         importance_dict: Dictionary mapping modality names to importance score arrays
-            of shape (n_features,). Higher scores indicate more important features.
+            of shape (n_features,). Scores are normalized to [0, 1] range per modality,
+            where higher scores indicate more important features.
         importance_df: Pandas DataFrame with columns:
             - 'modality': Name of the modality
             - 'feature_index': Index of the feature
             - 'feature_name': Name of the feature
-            - 'importance': Importance score
+            - 'importance': Normalized importance score (0-1 range)
     
     Example:
         >>> from multiomicsbind import compute_feature_importance
@@ -117,6 +123,10 @@ def compute_feature_importance(
         >>> # Get top 10 most important features across all modalities
         >>> top_features = importance_df.nlargest(10, 'importance')
         >>> print(top_features[['modality', 'feature_name', 'importance']])
+        >>> 
+        >>> # All scores are now between 0 and 1
+        >>> print(f"Min score: {importance_df['importance'].min():.3f}")  # Should be ~0.0
+        >>> print(f"Max score: {importance_df['importance'].max():.3f}")  # Should be ~1.0
         >>> 
         >>> # Save for further analysis
         >>> importance_df.to_csv('feature_importance.csv', index=False)
@@ -169,6 +179,15 @@ def compute_feature_importance(
         
         # Compute importance as mean absolute gradient across samples
         importance_scores = np.mean(np.abs(stacked_grads), axis=0)
+        
+        # Normalize importance scores to [0, 1] range for interpretability
+        # This makes scores comparable across different modalities and runs
+        min_score = importance_scores.min()
+        max_score = importance_scores.max()
+        if max_score > min_score:  # Avoid division by zero
+            importance_scores = (importance_scores - min_score) / (max_score - min_score)
+        else:
+            importance_scores = np.zeros_like(importance_scores)  # All features equal importance
         
         # Get feature names from dataset
         feature_names = dataset.get_feature_names(modality)
