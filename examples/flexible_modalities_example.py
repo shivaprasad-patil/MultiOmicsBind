@@ -23,7 +23,8 @@ from multiomicsbind import (
     MultiOmicsDataset,
     MultiOmicsBindWithHead,
     train_multiomicsbind,
-    evaluate_model
+    evaluate_model,
+    set_seed
 )
 from multiomicsbind.training.evaluation import evaluate_temporal_model
 
@@ -36,7 +37,7 @@ def create_custom_synthetic_data(data_config, n_samples=1000):
         data_config (dict): Configuration specifying modalities and their feature counts
         n_samples (int): Number of samples to generate
     """
-    np.random.seed(42)
+    set_seed(42)  # Use built-in set_seed for reproducibility
     
     # Create sample IDs
     sample_ids = [f"sample_{i:04d}" for i in range(n_samples)]
@@ -211,8 +212,7 @@ def run_experiment(data_config, embed_dim=256, epochs=10, batch_size=32):
     # ============================================
     print(f"\nTraining with automatic train/test split...")
     
-    # Automatic splitting with reproducible seed
-    torch.manual_seed(42)
+    # Automatic splitting (seed already set globally)
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])

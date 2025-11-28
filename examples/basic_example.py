@@ -22,7 +22,8 @@ from multiomicsbind import (
     MultiOmicsBindWithHead,
     train_multiomicsbind,
     evaluate_model,
-    plot_training_history
+    plot_training_history,
+    set_seed
 )
 from multiomicsbind.training.evaluation import evaluate_temporal_model
 from multiomicsbind.analysis import create_analysis_report
@@ -156,8 +157,8 @@ def main():
     # ============================================
     # NEW: Automatic train/test splitting with reproducible seed!
     # ============================================
-    print(f"\n4. Automatic train/test splitting...")
-    torch.manual_seed(42)  # Reproducible splits
+    print(f"\n4. Setting seed for reproducibility...")
+    set_seed(42)  # Ensures reproducible results across all random operations
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
@@ -202,7 +203,8 @@ def main():
         epochs=20,
         temperature=0.07,
         use_classification=True,
-        scheduler=scheduler
+        scheduler=scheduler,
+        seed=42  # Ensures reproducible training
     )
     
     print(f"\n✅ Training complete!")

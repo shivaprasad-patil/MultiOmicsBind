@@ -34,7 +34,8 @@ from multiomicsbind import (
     plot_training_history_detailed, # NEW: Detailed training plots
     plot_cross_modal_similarity_matrices, # NEW: Similarity heatmaps
     check_and_fix_all_nan_values,  # NEW: Automatic NaN detection and fixing
-    create_analysis_report         # NEW: Comprehensive analysis report
+    create_analysis_report,         # NEW: Comprehensive analysis report
+    set_seed                        # NEW: Reproducibility
 )
 
 
@@ -47,6 +48,9 @@ def create_synthetic_temporal_data(n_samples=1000, save_files=True):
     """
     print("Creating synthetic temporal multi-omics data...")
     
+    # Set seed for reproducibility
+    set_seed(42)
+    
     # Generate sample IDs
     sample_ids = [f"sample_{i:04d}" for i in range(n_samples)]
     
@@ -54,7 +58,6 @@ def create_synthetic_temporal_data(n_samples=1000, save_files=True):
     timepoints = [0, 1, 2, 4, 8]
     
     # Generate labels (3 classes: No response, Partial response, Full response)
-    np.random.seed(42)
     labels = np.random.choice([0, 1, 2], size=n_samples, p=[0.3, 0.4, 0.3])
     
     # Create static modalities (baseline measurements)

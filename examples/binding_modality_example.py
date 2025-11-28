@@ -11,15 +11,14 @@ NEW: Now includes automatic train/test splitting and custom class names!
 import torch
 import numpy as np
 import pandas as pd
-from multiomicsbind import MultiOmicsBindWithHead, MultiOmicsDataset, train_multiomicsbind
+from multiomicsbind import MultiOmicsBindWithHead, MultiOmicsDataset, train_multiomicsbind, set_seed
 from multiomicsbind.core.losses import binding_modality_loss, contrastive_loss
 import matplotlib.pyplot as plt
 
 
 def create_synthetic_multiomics_data(n_samples=500, seed=42):
     """Create synthetic multi-omics data for demonstration."""
-    np.random.seed(seed)
-    torch.manual_seed(seed)
+    set_seed(seed)  # Use built-in set_seed for complete reproducibility
     
     # Define modalities with different dimensions
     modalities = {
@@ -258,7 +257,7 @@ def demonstrate_real_world_usage():
     
     # Create synthetic dataset
     print("\n1. Creating synthetic multi-omics dataset...")
-    np.random.seed(42)
+    set_seed(42)  # Use built-in set_seed for reproducibility
     n_samples = 500
     
     # Generate synthetic data
@@ -309,8 +308,8 @@ def demonstrate_real_world_usage():
     print("\n3. Training with automatic train/test split...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
+    # Set seed for reproducible splitting (already set globally, but being explicit)
     # Automatic splitting with reproducible seed
-    torch.manual_seed(42)
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])

@@ -23,7 +23,8 @@ from multiomicsbind import (
     compute_cross_modal_similarity,  # NEW: High-level API
     plot_embeddings_umap,
     plot_feature_importance,
-    plot_confusion_matrix
+    plot_confusion_matrix,
+    set_seed                         # NEW: Reproducibility
 )
 
 
@@ -260,4 +261,6 @@ def main():
 
 
 if __name__ == "__main__":
+    # Set seed for reproducibility
+    set_seed(42)
     main()

@@ -3,7 +3,9 @@ Utility functions for data preprocessing and handling in MultiOmicsBind.
 """
 
 import numpy as np
-from typing import Union
+import random
+import torch
+from typing import Union, Optional
 
 
 def fix_nan_values(
@@ -328,3 +330,84 @@ def check_and_fix_all_nan_values(
             print("=" * 80)
     
     return dataset, nan_summary
+
+
+def set_seed(seed: int = 42, deterministic: bool = True, verbose: bool = True):
+    """
+    Set random seeds for reproducibility across numpy, random, and PyTorch.
+    
+    This function ensures that running the same code multiple times with the same
+    data produces identical results. It sets seeds for:
+    - Python's built-in random module
+    - NumPy's random number generator
+    - PyTorch's random number generator (CPU and CUDA)
+    - PyTorch's deterministic algorithms (optional)
+    
+    Args:
+        seed (int): Random seed value (default: 42)
+        deterministic (bool): Whether to use deterministic algorithms in PyTorch.
+            This may reduce performance but ensures complete reproducibility.
+            (default: True)
+        verbose (bool): Whether to print confirmation message (default: True)
+    
+    Returns:
+        None
+    
+    Example:
+        >>> from multiomicsbind import set_seed
+        >>> 
+        >>> # Set seed at the beginning of your script
+        >>> set_seed(42)
+        >>> 
+        >>> # Now all random operations will be reproducible
+        >>> model = MultiOmicsBindWithHead(...)
+        >>> dataset = MultiOmicsDataset(...)
+        >>> train_multiomicsbind(model, dataloader, ...)
+        >>> 
+        >>> # Running the same code again with seed=42 will give identical results
+    
+    Note:
+        - For complete reproducibility, call this function before any random operations
+        - deterministic=True may impact performance in some PyTorch operations
+        - CUDA operations may still have minor variations due to hardware/driver differences
+        - For maximum reproducibility on GPU, also set CUBLAS_WORKSPACE_CONFIG=:4096:8
+          as an environment variable before running your script
+    
+    Reference:
+        PyTorch reproducibility guide: https://pytorch.org/docs/stable/notes/randomness.html
+    """
+    # Set Python's built-in random seed
+    random.seed(seed)
+    
+    # Set NumPy random seed
+    np.random.seed(seed)
+    
+    # Set PyTorch random seed for CPU
+    torch.manual_seed(seed)
+    
+    # Set PyTorch random seed for all GPUs
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # For multi-GPU setups
+    
+    # Configure deterministic behavior
+    if deterministic:
+        # Make cuDNN deterministic (may reduce performance)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        
+        # Use deterministic algorithms in PyTorch (PyTorch 1.8+)
+        try:
+            torch.use_deterministic_algorithms(True)
+        except AttributeError:
+            # For older PyTorch versions
+            torch.set_deterministic(True)
+    
+    if verbose:
+        print(f"✓ Random seed set to {seed} for reproducibility")
+        if deterministic:
+            print(f"  • Deterministic mode: ON (may reduce performance)")
+        else:
+            print(f"  • Deterministic mode: OFF (better performance, less strict reproducibility)")
+        if torch.cuda.is_available():
+            print(f"  • CUDA seeds set for {torch.cuda.device_count()} GPU(s)")

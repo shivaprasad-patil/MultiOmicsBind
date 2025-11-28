@@ -11,6 +11,7 @@ from tqdm import tqdm
 import numpy as np
 
 from ..core.losses import contrastive_loss
+from ..utils.helpers import set_seed
 
 
 def train_multiomicsbind(
@@ -24,10 +25,13 @@ def train_multiomicsbind(
     contrastive_weight: float = 1.0,
     classification_weight: float = 1.0,
     scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
+    seed: int = 42,
     verbose: bool = True
 ) -> nn.Module:
     """
     Train MultiOmicsBind model with contrastive and/or classification objectives.
+    
+    Automatically sets random seed for reproducibility unless explicitly disabled.
     
     Args:
         model (nn.Module): MultiOmicsBind model to train
@@ -40,6 +44,8 @@ def train_multiomicsbind(
         contrastive_weight (float): Weight for contrastive loss (default: 1.0)
         classification_weight (float): Weight for classification loss (default: 1.0)
         scheduler (Optional): Learning rate scheduler
+        seed (int): Random seed for reproducibility. Set to None to disable automatic
+            seeding. (default: 42)
         verbose (bool): Whether to print training progress (default: True)
         
     Returns:
@@ -48,11 +54,29 @@ def train_multiomicsbind(
     Example:
         >>> model = MultiOmicsBindWithHead(input_dims, num_classes=3)
         >>> optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+        >>> 
+        >>> # Train with default seed (42) - automatic reproducibility
         >>> trained_model = train_multiomicsbind(
         ...     model, dataloader, optimizer, device,
         ...     epochs=50, use_classification=True
         ... )
+        >>> 
+        >>> # Train with custom seed
+        >>> trained_model = train_multiomicsbind(
+        ...     model, dataloader, optimizer, device,
+        ...     epochs=50, seed=123  # Use different seed
+        ... )
+        >>> 
+        >>> # Disable automatic seeding
+        >>> trained_model = train_multiomicsbind(
+        ...     model, dataloader, optimizer, device,
+        ...     epochs=50, seed=None  # No automatic seed
+        ... )
     """
+    # Set seed for reproducibility by default
+    if seed is not None:
+        set_seed(seed, verbose=verbose)
+    
     model.train()
     criterion_clf = nn.CrossEntropyLoss()
     
@@ -302,6 +326,7 @@ def train_temporal_model(
     train_split: Optional[float] = None,
     test_split: Optional[float] = None,
     save_path: Optional[str] = None,
+    seed: int = 42,
     verbose: bool = True,
     n_classes: Optional[int] = None,
     hidden_dim: Optional[int] = None,
@@ -315,6 +340,8 @@ def train_temporal_model(
     This function provides a high-level interface for training temporal multi-omics
     models with minimal boilerplate code. It handles model initialization, automatic
     train/test splitting, training loop, and history tracking.
+    
+    Automatically sets random seed for reproducibility unless explicitly disabled.
     
     Args:
         dataset: TemporalMultiOmicsDataset instance (or Subset for external split)
@@ -333,6 +360,8 @@ def train_temporal_model(
         test_split (Optional[float]): Complementary to train_split (e.g., 0.2 for 20% test).
                                       Both train_split and test_split must sum to 1.0.
         save_path (Optional[str]): Path to save trained model (default: None, no saving)
+        seed (int): Random seed for reproducibility. Set to None to disable automatic
+            seeding. (default: 42)
         verbose (bool): Whether to print training progress (default: True)
         n_classes (Optional[int]): Number of classes (inferred if None)
         hidden_dim (Optional[int]): Hidden dimension (uses embed_dim if None)
@@ -366,6 +395,10 @@ def train_temporal_model(
         No split (use full dataset):
         >>> model, history = train_temporal_model(dataset, device, epochs=15, val_split=0.0)
     """
+    # Set seed for reproducibility by default
+    if seed is not None:
+        set_seed(seed, verbose=verbose)
+    
     # Handle backwards compatibility for learning_rate parameter
     if learning_rate is not None and lr == 1e-4:  # lr is at default
         lr = learning_rate
@@ -399,7 +432,7 @@ def train_temporal_model(
         dataset, test_dataset = random_split(
             dataset,
             [train_size, test_size],
-            generator=torch.Generator().manual_seed(42)
+            generator=torch.Generator().manual_seed(seed if seed is not None else 42)
         )
         return_test_set = True
         
