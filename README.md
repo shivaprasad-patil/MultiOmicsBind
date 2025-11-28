@@ -15,6 +15,8 @@
 - 🚀 **High-Level API** - Train models with single function calls
 - ⚡ **Automatic Reproducibility** - Built-in seeding for consistent results
 
+![MultiOmicsBind Architecture](architecture.png)
+
 ## Installation
 
 ```bash
@@ -185,10 +187,10 @@ model, history = train_multiomicsbind(dataset, device, epochs=20, seed=None)
 If you use MultiOmicsBind in your research, please cite:
 
 ```bibtex
-@software{multiomicsbind2024,
+@software{multiomicsbind2025,
   title={MultiOmicsBind: Deep Learning Framework for Multi-Omics Integration},
   author={Patil, Shivaprasad},
-  year={2024},
+  year={2025},
   url={https://github.com/shivaprasad-patil/MultiOmicsBind}
 }
 ```
